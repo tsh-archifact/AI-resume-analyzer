@@ -1,0 +1,2 @@
+Skills: Python, SQL, Data Engineering, Machine Learning
+Role requires data analysis and reporting.
