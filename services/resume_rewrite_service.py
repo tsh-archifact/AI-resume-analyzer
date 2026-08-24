@@ -1,43 +1,35 @@
+from fastapi import HTTPException, UploadFile
+
 from config.llm_setup import get_llm_api_key, get_llm_client, get_llm_model
 from services.prompts import build_resume_rewrite_prompt
+from services.text_extraction_service import extract_text_from_file
+from utils.file_utils import JOB_DESCRIPTION_UPLOAD_EXTENSIONS, save_upload_to_temp_file, validate_upload_file
 
 
-def format_resume_text(resume_text: str) -> str:
-    """Keep fallback output readable without inventing new resume content."""
-    section_names = {"profile", "education", "projects", "skills", "languages"}
-    lines = [line.strip() for line in resume_text.replace("\r", "\n").split("\n") if line.strip()]
-    formatted_lines: list[str] = []
+async def resolve_job_description(
+    job_description: UploadFile | None,
+    job_description_text: str | None,
+) -> tuple[str | None, str, str]:
+    if job_description is not None and job_description_text and job_description_text.strip():
+        raise HTTPException(status_code=400, detail="Provide either job_description or job_description_text, not both.")
 
-    for line in lines:
-        lower = line.lower().strip()
-        if lower in section_names and formatted_lines and formatted_lines[-1] != "":
-            formatted_lines.append("")
+    if job_description is None and not job_description_text:
+        raise HTTPException(status_code=400, detail="Provide a job_description file or job_description_text.")
 
-        if lower in section_names:
-            formatted_lines.append(line)
-            continue
+    if job_description_text is not None:
+        text = job_description_text.strip()
+        if not text:
+            raise HTTPException(status_code=400, detail="job_description_text must not be empty.")
+        return None, text, "job_description_text"
 
-        previous_line = formatted_lines[-1].lower() if formatted_lines else ""
-        is_skill_line = ":" in line and previous_line == "skills"
-        is_skill_category = ":" in line and any(
-            line.lower().startswith(prefix) for prefix in ["programming", "core", "databases", "soft skills"]
-        )
-
-        if is_skill_line or (formatted_lines and formatted_lines[-1].startswith("- ") and is_skill_category):
-            formatted_lines.append(f"- {line.removeprefix('-').strip()}")
-        else:
-            formatted_lines.append(line)
-
-    return "\n".join(formatted_lines).strip()
-
-
-def build_fallback_resume(resume_text: str, _jd_text: str) -> str:
-    return format_resume_text(resume_text)
+    validate_upload_file(job_description, JOB_DESCRIPTION_UPLOAD_EXTENSIONS)
+    job_description_path = await save_upload_to_temp_file(job_description)
+    return job_description_path, extract_text_from_file(job_description_path), job_description.filename or "job_description"
 
 
 def rewrite_resume_with_llm(resume_text: str, jd_text: str) -> str:
     if not get_llm_api_key():
-        return build_fallback_resume(resume_text, jd_text)
+        raise RuntimeError("Resume rewrite unavailable: LLM API key is not configured.")
 
     try:
         client = get_llm_client()
@@ -53,6 +45,10 @@ def rewrite_resume_with_llm(resume_text: str, jd_text: str) -> str:
             ],
         )
         content = response.choices[0].message.content
-        return content.strip() if content else build_fallback_resume(resume_text, jd_text)
-    except Exception:
-        return build_fallback_resume(resume_text, jd_text)
+        if not content or not content.strip():
+            raise RuntimeError("Resume rewrite unavailable: the LLM returned an empty response.")
+        return content.strip()
+    except RuntimeError:
+        raise
+    except Exception as error:
+        raise RuntimeError(f"Resume rewrite unavailable: LLM request failed: {error}") from error

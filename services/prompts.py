@@ -4,6 +4,9 @@ from schemas.resume import JobDescriptionSkills, ResumeSkills
 
 
 def build_skill_extraction_prompt(text: str, label: str) -> str:
+    print("this is the label :" , label)
+    print("this is the text : ", text )
+    
     return f"""
 Extract a clean list of skills from the {label} text below.
 
@@ -38,13 +41,15 @@ Required keys and types:
   "summary": "string",
   "overall_fit": "Strong|Moderate|Weak",
   "strengths": ["string"],
+  "required_skills":["string"],
+  "nice_to_have_skills":["string"],
   "missing_skills": ["string"],
   "recommendations": ["string"],
   "model_used": "string"
 }}
 
 Important:
-- Do not include any keys beyond these six.
+- Do not include any keys beyond these eight.
 - Keep lists as arrays of strings.
 - Keep summary short and professional.
 - Use exact values like "Strong", "Moderate", or "Weak" in overall_fit.
@@ -85,3 +90,6 @@ JOB DESCRIPTION:
 ORIGINAL RESUME:
 {resume_text}
 """
+
+
+# building the  prompt for the calculating the summary 

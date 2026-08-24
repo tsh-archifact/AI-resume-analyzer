@@ -8,8 +8,10 @@ from PyPDF2 import PdfReader
 
 def clean_text(raw_text: str) -> str:
     """Normalize extracted text so downstream services receive predictable input."""
-    if raw_text is None:
-        return ""
+    if isinstance(raw_text, list):
+        text = "\n".join(raw_text)
+    else:
+        text = raw_text
 
     text = raw_text.replace("\r\n", "\n").replace("\r", "\n")
     text = text.replace("\ufeff", "")

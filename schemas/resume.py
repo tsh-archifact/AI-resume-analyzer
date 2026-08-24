@@ -20,6 +20,8 @@ class SkillComparisonResult(BaseModel):
 class LLMRecommendation(BaseModel):
     summary: str = Field(default="")
     overall_fit: str = Field(default="")
+    required_skills:list[str]=Field(default_factory=list)
+    nice_to_have_skills:list[str]=Field(default_factory=list)
     strengths: list[str] = Field(default_factory=list)
     missing_skills: list[str] = Field(default_factory=list)
     recommendations: list[str] = Field(default_factory=list)

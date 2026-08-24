@@ -5,15 +5,16 @@ from docx import Document
 from fastapi import HTTPException, UploadFile
 
 
-ALLOWED_UPLOAD_EXTENSIONS = {".pdf", ".doc", ".docx", ".txt", ".md", ".csv", ".rtf", ".png", ".jpg", ".jpeg"}
+RESUME_UPLOAD_EXTENSIONS = {".pdf", ".doc", ".docx"}
+JOB_DESCRIPTION_UPLOAD_EXTENSIONS = {".pdf", ".doc", ".docx", ".txt", ".png", ".jpg", ".jpeg"}
 
 
-def validate_upload_file(uploaded_file: UploadFile) -> None:
+def validate_upload_file(uploaded_file: UploadFile, allowed_extensions: set[str]) -> None:
     suffix = Path(uploaded_file.filename or "").suffix.lower()
-    if suffix not in ALLOWED_UPLOAD_EXTENSIONS:
+    if suffix not in allowed_extensions:
         raise HTTPException(
             status_code=400,
-            detail=f"Unsupported file type for {uploaded_file.filename}. Allowed: {sorted(ALLOWED_UPLOAD_EXTENSIONS)}",
+            detail=f"Unsupported file type for {uploaded_file.filename}. Allowed: {sorted(allowed_extensions)}",
         )
 
 
