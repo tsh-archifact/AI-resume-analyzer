@@ -1,5 +1,9 @@
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
+from utils.limiter import limiter
+from fastapi import Request
+
+
 
 from schemas.resume import (
     JobDescriptionSkills,
@@ -21,16 +25,20 @@ from utils.file_utils import (
 )
 
 
+
 router = APIRouter()
 
 
 @router.get("/health")
-def health_check():
-    return {"status": "ok"}
+@limiter.limit("1/minute")
+def health_check(request:Request):
+    return {"status": "ok","IP":request.send_push_promise}
 
 
 @router.post("/compare-skill-sections", response_model=ResumeComparisonResponse)
+@limiter.limit("5/minute")
 def compare_skill_sections(
+    request:Request,
     resume_skills: ResumeSkills,
     job_description_skills: JobDescriptionSkills,
     _current_user: dict = Depends(get_current_user),
