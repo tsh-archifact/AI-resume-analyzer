@@ -24,6 +24,7 @@ FastAPI service for extracting resume and job-description text, comparing skills
 - SQLite-backed user registration and authentication with PBKDF2 password hashing.
 - JWT bearer access tokens with expiration and role claims.
 - Authorization protection on resume comparison and rewrite endpoints.
+- Structured resume and job-description profiles with LLM extraction, spaCy validation, evidence snippets, experience inference, and weighted ATS comparison.
 
 ### Current Limitations and Follow-ups
 
@@ -33,6 +34,7 @@ FastAPI service for extracting resume and job-description text, comparing skills
 - `ocr_data.py` is an older compatibility wrapper and does not re-export `extract_text_from_image`; use `services.text_extraction_service` or `ingestion_data.py` for the complete API.
 - Resume rewriting intentionally has no local fallback. It returns an API error when the LLM is unavailable.
 - Resume comparison and skill extraction still use local heuristic fallbacks when the LLM is unavailable.
+- Structured comparison requires both the configured LLM and spaCy model; it returns HTTP `503` when either is unavailable.
 - Input content is extracted and sent to the configured LLM, so deployments should consider file-size limits, privacy requirements, and sensitive resume data handling.
 
 ## API Endpoints
@@ -111,6 +113,8 @@ The endpoint extracts both files, identifies skills, calculates similarity, and 
 - matched and missing skills
 - match score
 - LLM or rule-based recruiter analysis
+- structured resume and job-description profiles with keywords, skills, experience, requirements, and evidence
+- required/preferred skill matches, experience fit, component scores, and a weighted overall ATS score
 
 ### `POST /rewrite-resume`
 
@@ -163,6 +167,7 @@ Set the provider credentials in `.env`:
 LLM_PROVIDER=groq
 GROQ_API_KEY=your_groq_api_key_here
 LLM_MODEL=groq/compound-mini
+SPACY_MODEL=en_core_web_sm
 JWT_SECRET_KEY=replace_with_a_random_secret_at_least_32_characters
 ACCESS_TOKEN_EXPIRE_MINUTES=30
 ```
@@ -219,6 +224,7 @@ Direct dependencies are kept in `pyproject.toml`:
 - `pypdf2`: PDF text extraction.
 - `python-docx`: DOCX reading and rewritten DOCX generation.
 - `easyocr` and `pillow`: PNG/JPG/JPEG OCR support.
+- `spacy`: NLP tokenization and validation for structured profile extraction.
 - `python-dotenv`: `.env` configuration loading.
 Packages such as PyTorch, TorchVision, SciPy, OpenCV, NumPy, and Shapely are transitive EasyOCR dependencies. They should not be removed while image OCR is enabled.
 

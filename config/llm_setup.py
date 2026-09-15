@@ -23,6 +23,10 @@ def get_llm_model() -> str:
     return os.getenv("LLM_MODEL") or os.getenv(env_name) or default_models.get(provider, "groq/compound-mini")
 
 
+def get_spacy_model() -> str:
+    return os.getenv("SPACY_MODEL", "en_core_web_sm")
+
+
 def get_llm_api_key() -> str | None:
     provider = get_llm_provider()
     if provider == "groq":

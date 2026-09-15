@@ -12,6 +12,8 @@ from schemas.resume import (
     ResumeSkills,
 )
 from services.analysis_service import generate_llm_analysis
+from services.profile_service import extract_profile
+from services.structured_comparison_service import compare_profiles
 from services.auth_service import get_current_user
 from services.resume_rewrite_service import resolve_job_description, rewrite_resume_with_llm
 from services.skill_service import calculate_similarity, compare_skill_lists, get_best_skill_list
@@ -86,8 +88,15 @@ async def compare_resume(
 
         resume_text = extract_text_from_file(resume_path)
 
-        resume_skills = ResumeSkills(skills=get_best_skill_list(resume_text, "resume"))
-        jd_skills = JobDescriptionSkills(skills=get_best_skill_list(jd_text, "job description"))
+        try:
+            resume_profile = extract_profile(resume_text, "resume")
+            jd_profile = extract_profile(jd_text, "job_description")
+        except RuntimeError as error:
+            raise HTTPException(status_code=503, detail=str(error)) from error
+
+        resume_skills = ResumeSkills(skills=[skill.name for skill in resume_profile.skills] or resume_profile.keywords)
+        jd_skill_values = [skill.name for skill in jd_profile.required_skills + jd_profile.preferred_skills]
+        jd_skills = JobDescriptionSkills(skills=jd_skill_values or jd_profile.keywords)
         return ResumeComparisonResponse(
             resume_file=resume.filename,
             job_description_file=jd_filename,
@@ -95,6 +104,9 @@ async def compare_resume(
             job_description_skills=jd_skills,
             similarity=calculate_similarity(resume_skills,jd_skills),
             llm_analysis=generate_llm_analysis(resume_text, jd_text, resume_skills, jd_skills),
+            resume_profile=resume_profile,
+            job_description_profile=jd_profile,
+            structured_comparison=compare_profiles(resume_profile, jd_profile),
         )
     finally:
         remove_temp_files(resume_path, jd_path)
