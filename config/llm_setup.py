@@ -14,11 +14,17 @@ def get_llm_model() -> str:
     """Resolve the model in one place so services stay provider-agnostic."""
     provider = get_llm_provider()
     default_models = {
-        "groq": "groq/compound-mini",
-        "openai": "gpt-4o-mini",
+        "nivdia":"deepseek-ai/deepseek-v4-flash-0731",
+        # "groq": "groq/compound-mini",
+        # "openai": "gpt-4o-mini"
+        
     }
     env_name = f"{provider.upper()}_MODEL"
     return os.getenv("LLM_MODEL") or os.getenv(env_name) or default_models.get(provider, "groq/compound-mini")
+
+
+def get_spacy_model() -> str:
+    return os.getenv("SPACY_MODEL", "en_core_web_sm")
 
 
 def get_llm_api_key() -> str | None:
@@ -27,7 +33,11 @@ def get_llm_api_key() -> str | None:
         return os.getenv("GROQ_API_KEY") or os.getenv("LLM_API_KEY")
     if provider == "openai":
         return os.getenv("OPENAI_API_KEY") or os.getenv("LLM_API_KEY")
+    if provider == "nivdia":
+        return os.getenv("DEEPSEEK_API_KEY") or os.getenv("LLM_API_KEY")
     return os.getenv("LLM_API_KEY")
+    
+
 
 
 def get_llm_client() -> Any:
@@ -43,7 +53,10 @@ def get_llm_client() -> Any:
 
     if provider == "openai":
         from openai import OpenAI
-
         return OpenAI(api_key=api_key)
+
+    if provider == "nivdia":
+            from openai import OpenAI
+            return OpenAI(base_url ="https://integrate.api.nvidia.com/v1",api_key=api_key)
 
     raise ValueError(f"Unsupported LLM provider: {provider}")

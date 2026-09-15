@@ -1,3 +1,13 @@
+"""
+Compatibility shim — re-exports all public symbols from
+``services.text_extraction_service``.
+
+.. deprecated::
+   Import directly from ``services.text_extraction_service`` instead.
+   This module exists only to avoid breaking any external scripts that
+   referenced the old top-level ``ingestion_data`` module.
+"""
+
 from services.text_extraction_service import (
     clean_text,
     extract_text_from_docx,

@@ -2,12 +2,19 @@ import json
 import re
 
 from config.llm_setup import get_llm_api_key, get_llm_client, get_llm_model
-from schemas.resume import SkillComparisonResult
+from schemas.resume import SkillComparisonResult,ResumeSkills,JobDescriptionSkills
 from services.prompts import build_skill_extraction_prompt
 
 
 def normalize_skill(skill: str) -> str:
     return re.sub(r"\s+", " ", skill.strip()).strip(" -;:|")
+
+def is_skill_match(skill1: str, skill2: str) -> bool:
+    words1 = set(skill1.lower().split())
+    words2 = set(skill2.lower().split())
+
+    return words1.issubset(words2) or words2.issubset(words1)
+
 
 
 def unique_skills(skills: list[str]) -> list[str]:
@@ -99,21 +106,59 @@ def extract_skills_with_llm(text: str, label: str) -> list[str]:
 def get_best_skill_list(text: str, label: str) -> list[str]:
     return extract_skills_with_llm(text, label) or extract_skills_from_text(text, label)
 
+def compare_skill_lists(
+    resume_skills: ResumeSkills,
+    jd_skills: JobDescriptionSkills
+) -> SkillComparisonResult:
 
-def compare_skill_lists(resume_skills: list[str], jd_skills: list[str]) -> SkillComparisonResult:
-    resume_set = {skill.lower() for skill in resume_skills}
-    jd_set = {skill.lower() for skill in jd_skills}
-    union = resume_set | jd_set
-    score = round((len(resume_set & jd_set) / len(union)) * 100, 2) if union else 0.0
+    resume_set = {skill.lower() for skill in resume_skills.skills}
+    jd_set = {skill.lower() for skill in jd_skills.skills}
+
+    matched_skills = []
+    missing_skills = []
+
+    for resume_skill in resume_skills.skills:
+
+        resume_normalized = resume_skill.lower()
+
+        found_match = any(
+            is_skill_match(resume_normalized, jd_skill)
+            for jd_skill in jd_set
+        )
+
+        if found_match:
+            matched_skills.append(resume_skill)
+
+    for jd_skill in jd_skills.skills:
+
+        jd_normalized = jd_skill.lower()
+
+        found_match = any(
+            is_skill_match(jd_normalized, resume_skill)
+            for resume_skill in resume_set
+        )
+
+        if not found_match:
+            missing_skills.append(jd_skill)
+
+    # Calculate score
+    matched_count = len(matched_skills)
+    total_jd_skills = len(jd_set)
+
+    score = (
+        round((matched_count / total_jd_skills) * 100, 2)
+        if total_jd_skills
+        else 0.0
+    )
 
     return SkillComparisonResult(
-        matched_skills=[skill for skill in resume_skills if skill.lower() in jd_set],
-        missing_skills=[skill for skill in jd_skills if skill.lower() not in resume_set],
+        matched_skills=matched_skills,
+        missing_skills=missing_skills,
         match_score=score,
     )
 
 
-def calculate_similarity(resume_text: str, jd_text: str) -> SkillComparisonResult:
-    resume_skills = get_best_skill_list(resume_text, "resume")
-    jd_skills = get_best_skill_list(jd_text, "job description")
+def calculate_similarity(resume_text:ResumeSkills, jd_text:JobDescriptionSkills) -> SkillComparisonResult:
+    resume_skills = resume_text
+    jd_skills = jd_text
     return compare_skill_lists(resume_skills, jd_skills)
