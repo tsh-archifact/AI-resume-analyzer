@@ -55,7 +55,9 @@ def extract_skills_from_text(text: str, section_name: str = "skills") -> list[st
 
         for next_line in lines[idx + 1 : idx + 8]:
             next_lower = next_line.lower()
-            if next_line and not any(keyword in next_lower for keyword in ["experience", "education", "projects", "summary"]):
+            if any(keyword in next_lower for keyword in ["experience", "education", "projects", "summary"]):
+                break
+            if next_line:
                 skills.extend(normalize_skill(part) for part in re.split(r"[,|/]+", next_line))
             if len(skills) >= 20:
                 break

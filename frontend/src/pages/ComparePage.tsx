@@ -3,6 +3,7 @@ import { useState, type FormEvent } from 'react'
 import { compareResume } from '../api/resume'
 import { ApiRequestError } from '../api/client'
 import { AnalysisCard } from '../components/AnalysisCard'
+import { AgentAuditCard } from '../components/AgentAuditCard'
 import { FileUpload } from '../components/FileUpload'
 import { MatchScore } from '../components/MatchScore'
 import { SkillTags } from '../components/SkillTags'
@@ -190,6 +191,7 @@ export function ComparePage() {
               </div>
 
               {result.llm_analysis ? <AnalysisCard analysis={result.llm_analysis} /> : null}
+              {result.agent_audit ? <AgentAuditCard audit={result.agent_audit} /> : null}
             </>
           ) : null}
         </div>

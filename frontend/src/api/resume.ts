@@ -34,11 +34,25 @@ export async function compareResume(
   )
 }
 
+export interface AgentRewriteMetadata {
+  initialScore: number | null
+  finalScore: number | null
+  scoreImprovement: number | null
+  iterations: number | null
+  isFactClean: boolean
+}
+
+export interface RewriteResumeResult {
+  blob: Blob
+  filename: string
+  agentMetadata: AgentRewriteMetadata
+}
+
 export async function rewriteResume(
   input: ResumeJobInput,
   token: string,
-): Promise<{ blob: Blob; filename: string }> {
-  const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '/api'
+): Promise<RewriteResumeResult> {
+  const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
   const response = await fetch(`${API_BASE}/rewrite-resume`, {
     method: 'POST',
     headers: {
@@ -65,5 +79,56 @@ export async function rewriteResume(
   const filenameMatch = disposition.match(/filename="?([^"]+)"?/)
   const filename = filenameMatch?.[1] ?? 'rewritten_resume.docx'
 
-  return { blob, filename }
+  const initialScore = response.headers.get('x-agent-initial-score')
+  const finalScore = response.headers.get('x-agent-final-score')
+  const improvement = response.headers.get('x-agent-score-improvement')
+  const iterations = response.headers.get('x-agent-iterations')
+  const factClean = response.headers.get('x-agent-fact-clean')
+
+  const agentMetadata: AgentRewriteMetadata = {
+    initialScore: initialScore ? parseFloat(initialScore) : null,
+    finalScore: finalScore ? parseFloat(finalScore) : null,
+    scoreImprovement: improvement ? parseFloat(improvement) : null,
+    iterations: iterations ? parseInt(iterations, 10) : null,
+    isFactClean: factClean ? factClean.toLowerCase() === 'true' : true,
+  }
+
+  return { blob, filename, agentMetadata }
 }
+
+export async function runAgentRewrite(
+  input: ResumeJobInput,
+  token: string,
+  targetScore: number = 80,
+  maxIterations: number = 3,
+): Promise<import('../types/api').RefinementLoopResult> {
+  const formData = buildCompareForm(input)
+  formData.append('target_score', String(targetScore))
+  formData.append('max_iterations', String(maxIterations))
+
+  return apiFetch<import('../types/api').RefinementLoopResult>(
+    '/agent/rewrite',
+    {
+      method: 'POST',
+      body: formData,
+    },
+    token,
+  )
+}
+
+export async function exportDocx(content: string, token: string): Promise<Blob> {
+  const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
+  const response = await fetch(`${API_BASE}/agent/export-docx`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ content }),
+  })
+  if (!response.ok) {
+    throw new ApiRequestError('Failed to generate DOCX from text', response.status)
+  }
+  return response.blob()
+}
+

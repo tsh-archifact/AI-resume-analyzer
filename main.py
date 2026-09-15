@@ -19,7 +19,7 @@ def create_app() -> FastAPI:
 
     cors_origins = os.getenv(
         "CORS_ORIGINS",
-        "http://127.0.0.1:5173,http://localhost:5173",
+        "http://127.0.0.1:5173,http://localhost:5173,http://[::1]:5173",
     ).split(",")
     app.add_middleware(
         CORSMiddleware,
@@ -27,10 +27,32 @@ def create_app() -> FastAPI:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+        expose_headers=["X-Agent-Initial-Score", "X-Agent-Final-Score", "X-Agent-Score-Improvement", "X-Agent-Iterations", "X-Agent-Fact-Clean", "Content-Disposition"],
     )
     
+    @app.get("/")
+    def root():
+        return {
+            "status": "online",
+            "message": "AI Resume Analyzer API is running",
+            "docs": "/docs",
+            "health": "/health",
+        }
+
+    @app.get("/api")
+    def api_root():
+        return {
+            "status": "online",
+            "message": "AI Resume Analyzer API is running",
+            "docs": "/docs",
+            "health": "/api/health",
+        }
+
+    # Mount routers both with and without /api prefix for proxy and direct compatibility
     app.include_router(auth_router)
     app.include_router(router)
+    app.include_router(auth_router, prefix="/api")
+    app.include_router(router, prefix="/api")
     return app
 
 

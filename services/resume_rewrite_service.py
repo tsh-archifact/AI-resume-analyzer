@@ -52,3 +52,31 @@ def rewrite_resume_with_llm(resume_text: str, jd_text: str) -> str:
         raise
     except Exception as error:
         raise RuntimeError(f"Resume rewrite unavailable: LLM request failed: {error}") from error
+
+
+def rewrite_resume_with_agent(
+    resume_text: str,
+    jd_text: str,
+    target_score: float = 80.0,
+    max_iterations: int = 3,
+    enforce_fact_check: bool = True,
+):
+    """Executes the autonomous multi-agent reflection loop (Drafter + Auditor + Fact-Checker)."""
+    if not get_llm_api_key():
+        raise RuntimeError("Resume rewrite unavailable: LLM API key is not configured.")
+
+    from services.agents.refinement_loop import run_self_refining_loop
+
+    try:
+        return run_self_refining_loop(
+            resume_text=resume_text,
+            jd_text=jd_text,
+            target_score=target_score,
+            max_iterations=max_iterations,
+            enforce_fact_check=enforce_fact_check,
+        )
+    except RuntimeError:
+        raise
+    except Exception as error:
+        raise RuntimeError(f"Agentic resume rewrite failed: {error}") from error
+
