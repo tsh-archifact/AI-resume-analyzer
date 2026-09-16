@@ -21,7 +21,6 @@ from services.auth_service import get_current_user
 from services.resume_rewrite_service import (
     resolve_job_description,
     rewrite_resume_with_agent,
-    rewrite_resume_with_llm,
 )
 from services.skill_service import calculate_similarity, compare_skill_lists, get_best_skill_list
 from services.text_extraction_service import extract_text_from_file

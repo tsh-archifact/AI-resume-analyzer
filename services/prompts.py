@@ -3,69 +3,115 @@ import json
 from schemas.resume import JobDescriptionSkills, ResumeSkills
 
 
-def build_skill_extraction_prompt(text: str, label: str) -> str:
-    return f"""
-You are a resume and job-description information extraction system.
-Extract skills from the {label} text below.
-
-Rules:
-- Extract only skills explicitly present in the source text.
-- Return atomic skills, tools, frameworks, platforms, databases, methods, and technologies.
-- Convert sentences into skill names. For example, "built APIs with Express.js" becomes "Express.js".
-- Do not extract job titles, employers, locations, degrees, responsibilities, benefits, or section headings.
-- Preserve meaningful versions, such as "Python 3" or ".NET 8".
-- Do not infer equivalent skills. If the text says "Postgres", return "Postgres"; do not silently change it to "PostgreSQL".
-- Remove duplicates while preserving the clearest source wording.
-
-Return ONLY a valid JSON object matching this schema exactly:
-{{"skills": ["Skill 1", "Skill 2", "Skill 3"]}}
-
-Text:
-{text[:6000]}
-"""
-
-
 def build_profile_extraction_prompt(text: str, document_type: str) -> str:
+
     if document_type == "resume":
         schema = {
             "keywords": ["Python"],
-            "skills": [{"name": "Python", "category": "technical", "years_experience": 3.0, "evidence": [{"text": "...", "confidence": 0.9}]}],
-            "total_years_experience": 3.0,
-            "experience_periods": [{"title": "Software Engineer", "company": "Example", "start_date": "2021", "end_date": "present", "evidence": []}],
-            "experience_evidence": [{"text": "3 years of experience", "confidence": 0.95}],
+            "skills": [
+                {
+                    "name": "Python",
+                    "category": "technical",
+                    "years_experience": None,
+                    "evidence": [
+                        {
+                            "text": "...",
+                            "confidence": 0.9
+                        }
+                    ]
+                }
+            ],
+            "total_years_experience": None,
+            "experience_periods": [],
+            "experience_evidence": []
         }
+
     else:
         schema = {
             "keywords": ["Python"],
-            "required_skills": [{"name": "Python", "category": "technical", "years_experience": None, "evidence": []}],
+            "required_skills": [
+                {
+                    "name": "Python",
+                    "category": "technical",
+                    "years_experience": None,
+                    "evidence": []
+                }
+            ],
             "preferred_skills": [],
-            "experience_requirement": {"minimum_years": 3.0, "preferred_years": None, "evidence": []},
+            "experience_requirement": {
+                "minimum_years": None,
+                "preferred_years": None,
+                "evidence": []
+            }
         }
-    return f"""
-You are a factual resume and job-description parser. Extract structured data from this {document_type}.
 
-The source document is authoritative. Do not use outside knowledge to add facts, expand abbreviations, or
-assume that a related technology is equivalent. If a value is not explicitly supported, use null or an empty
-array. Do not guess years, dates, skills, employers, or responsibilities.
+    return f"""
+You are a factual resume and job-description parser.
+
+Extract structured information ONLY from the provided source document.
+
+The source document is authoritative. Do not use outside knowledge to add facts,
+infer experience, or assume that a related technology is equivalent.
 
 Return only valid JSON matching this schema:
+
 {json.dumps(schema)}
 
-Rules:
-- `keywords` must be atomic technologies, tools, methods, or domain skills explicitly present in the document.
-- Each skill evidence item must be an exact or near-exact short quote from the source.
-- For a resume, prefer an explicit total-experience statement only when it clearly refers to the candidate.
-- If calculating from dated roles, use the dates in the source and do not double-count overlapping roles.
-- Do not count education dates, internships, unrelated dates, or dates without an identifiable role as employment.
-- For a job description, put mandatory language such as "required", "must have", or "minimum" in `required_skills`.
-- Put language such as "preferred", "nice to have", or "bonus" in `preferred_skills`.
-- If the JD does not state a requirement category clearly, use the surrounding wording and preserve uncertainty in evidence.
-- `minimum_years` must represent an explicit minimum requirement, not a guess from seniority words such as "senior".
-- `preferred_years` must represent an explicit preferred target, not a guess.
-- Confidence describes extraction certainty; it is not proof. Keep it between 0 and 1.
-- Return an empty array or null when evidence is absent.
+GENERAL RULES:
 
-Document:
+1. Search the ENTIRE document.
+   Do not restrict extraction to a section named "Skills".
+
+2. For resumes, extract skills and technologies from ALL relevant sections,
+   including:
+   - Profile / Summary
+   - Skills
+   - Work Experience
+   - Projects
+   - Project descriptions
+   - Responsibilities
+   - Certifications
+   - Education, when a skill is explicitly stated
+   - Achievements and other technical sections
+
+3. If a technology is explicitly mentioned in a project description,
+   responsibility, or experience description, it MUST be considered as
+   resume skill evidence even if it is absent from the dedicated Skills section.
+
+4. Do not infer a skill merely because another related skill is present.
+
+   Example:
+   MongoDB does not mean the resume explicitly says PostgreSQL.
+   Python does not mean the resume explicitly says Django.
+   HTML does not mean the resume explicitly says CSS.
+
+5. However, if the source explicitly contains the technology anywhere in the
+   document, extract it.
+
+6. Preserve the wording used by the source document.
+   Do not normalize aliases during extraction.
+
+   Example:
+   "Python3" should remain "Python3".
+   "SQL Lite" should remain "SQL Lite".
+
+7. Skill evidence must be an exact or near-exact short quote from the source.
+
+8. A project description is valid evidence of practical use of a technology.
+
+9. Do not invent years of experience.
+
+10. Only calculate years of experience when supported by explicit dates or
+    explicit experience statements.
+
+11. Do not count education dates, unrelated dates, or project dates as employment.
+
+12. Confidence represents extraction certainty, not skill proficiency.
+
+13. Return null or an empty array when evidence is absent.
+
+DOCUMENT:
+
 {text[:12000]}
 """
 

@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 
-import { runAgentRewrite, exportDocx, rewriteResume, type AgentRewriteMetadata } from '../api/resume'
+import { runAgentRewrite, exportDocx, type AgentRewriteMetadata } from '../api/resume'
 import { ApiRequestError } from '../api/client'
 import { FileUpload } from '../components/FileUpload'
 import { useAuth } from '../context/AuthContext'
@@ -78,32 +78,11 @@ export function RewritePage() {
         `Agentic optimization complete! ATS score improved from ${result.initial_score}% to ${result.final_score}%.`
       )
     } catch (caught) {
-      // Fallback to direct download if structured agent endpoint has an issue
-      try {
-        const { blob, filename, agentMetadata } = await rewriteResume(
-          {
-            resume,
-            jobDescriptionFile: jdMode === 'file' ? jdFile : null,
-            jobDescriptionText: jdMode === 'text' ? jdText : undefined,
-          },
-          token,
-        )
-
-        setAgentStats(agentMetadata)
-        const url = URL.createObjectURL(blob)
-        const anchor = document.createElement('a')
-        anchor.href = url
-        anchor.download = filename
-        anchor.click()
-        URL.revokeObjectURL(url)
-        setSuccessMessage(`Download started: ${filename}`)
-      } catch {
-        const message =
-          caught instanceof ApiRequestError
-            ? caught.message
-            : 'Rewrite failed. Please try again.'
-        setError(message)
-      }
+      const message =
+        caught instanceof ApiRequestError
+          ? caught.message
+          : 'Rewrite failed. Please try again.'
+      setError(message)
     } finally {
       setSubmitting(false)
     }
@@ -148,177 +127,201 @@ export function RewritePage() {
       </header>
 
       <div className="workspace-grid rewrite-grid">
-        <form className="panel form-panel" onSubmit={handleSubmit}>
-          <FileUpload
-            id="rewrite-resume"
-            label="Resume"
-            hint="PDF, DOC, or DOCX"
-            accept={RESUME_ACCEPT}
-            file={resume}
-            onChange={setResume}
-          />
-
-          <div className="form-group">
-            <label>Job description format</label>
-            <div className="segmented-control">
-              <button
-                type="button"
-                className={`segmented-button ${jdMode === 'text' ? 'active' : ''}`}
-                onClick={() => setJdMode('text')}
-              >
-                Paste text
-              </button>
-              <button
-                type="button"
-                className={`segmented-button ${jdMode === 'file' ? 'active' : ''}`}
-                onClick={() => setJdMode('file')}
-              >
-                Upload file
-              </button>
-            </div>
+        <form className="note-card form-panel" onSubmit={handleSubmit}>
+          <div className="note-banner banner-peach">
+            <span>AGENTIC RESUME OPTIMIZER</span>
+            <span style={{ opacity: 0.8, fontSize: '0.82rem', letterSpacing: '0.08em' }}>INPUT</span>
           </div>
 
-          {jdMode === 'text' ? (
-            <div className="form-group">
-              <label htmlFor="rewrite-jd-text">Job description text</label>
-              <textarea
-                id="rewrite-jd-text"
-                rows={6}
-                placeholder="Paste the full job posting here…"
-                value={jdText}
-                onChange={(event) => setJdText(event.target.value)}
-              />
-            </div>
-          ) : (
+          <div className="form-panel-body">
             <FileUpload
-              id="rewrite-jd"
-              label="Job description file"
-              hint="PDF, DOC, DOCX, TXT, PNG, JPG, or JPEG"
-              accept={JD_ACCEPT}
-              file={jdFile}
-              onChange={setJdFile}
+              id="rewrite-resume"
+              label="Source Resume"
+              hint="PDF, DOC, or DOCX"
+              accept={RESUME_ACCEPT}
+              file={resume}
+              onChange={setResume}
             />
-          )}
 
-          {error ? <p className="form-error">{error}</p> : null}
-          {successMessage ? <p className="form-success">{successMessage}</p> : null}
+            <fieldset className="mode-toggle">
+              <legend>Job description format</legend>
+              <label>
+                <input
+                  type="radio"
+                  name="rewrite-jd-mode"
+                  checked={jdMode === 'text'}
+                  onChange={() => setJdMode('text')}
+                />
+                ✏️ Paste text
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  name="rewrite-jd-mode"
+                  checked={jdMode === 'file'}
+                  onChange={() => setJdMode('file')}
+                />
+                📁 Upload file
+              </label>
+            </fieldset>
 
-          <button type="submit" className="btn btn-primary btn-block" disabled={submitting}>
-            {submitting ? '🤖 Agents are drafting, auditing & refining…' : 'Run Autonomous Agentic Optimizer'}
-          </button>
+            {jdMode === 'text' ? (
+              <div className="field">
+                <label htmlFor="rewrite-jd-text">Target Job Description</label>
+                <textarea
+                  id="rewrite-jd-text"
+                  rows={7}
+                  placeholder="Paste the target job posting / requirements here…"
+                  value={jdText}
+                  onChange={(event) => setJdText(event.target.value)}
+                />
+              </div>
+            ) : (
+              <FileUpload
+                id="rewrite-jd"
+                label="Job Description File"
+                hint="PDF, DOC, DOCX, TXT, PNG, JPG, or JPEG"
+                accept={JD_ACCEPT}
+                file={jdFile}
+                onChange={setJdFile}
+              />
+            )}
+
+            {error ? <p className="form-error">{error}</p> : null}
+            {successMessage ? <p className="form-success">{successMessage}</p> : null}
+
+            <button type="submit" className="btn btn-primary btn-block" disabled={submitting}>
+              {submitting ? 'Agents Drafting, Auditing & Refining…' : 'Run Autonomous Optimizer'}
+            </button>
+          </div>
         </form>
 
-        <aside className="panel info-panel">
-          {agentStats && agentStats.finalScore !== null ? (
-            <div className="agent-summary-card">
-              <h2>🤖 Agent Performance Card</h2>
-              <div style={{ margin: '1rem 0', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontWeight: 600 }}>Iterations Performed:</span>
-                  <span className="badge" style={{ background: '#3b82f6', color: '#fff', padding: '0.2rem 0.6rem', borderRadius: '4px' }}>
-                    {agentStats.iterations ?? 1} passes
-                  </span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontWeight: 600 }}>ATS Score Progression:</span>
-                  <span style={{ fontWeight: 700, color: '#10b981' }}>
-                    {agentStats.initialScore ?? 0}% → {agentStats.finalScore}%
-                    {agentStats.scoreImprovement && agentStats.scoreImprovement > 0 ? ` (+${agentStats.scoreImprovement}%)` : ''}
-                  </span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontWeight: 600 }}>Fact-Checking Guardrail:</span>
-                  <span style={{ color: agentStats.isFactClean ? '#10b981' : '#f59e0b', fontWeight: 600 }}>
-                    {agentStats.isFactClean ? '✅ 100% Grounded (0 Hallucinations)' : '⚠️ Grounded with notes'}
-                  </span>
+        <aside className="note-card info-panel" style={{ padding: 0, overflow: 'hidden' }}>
+          <div className="note-banner banner-peach">
+            <span>MULTI-AGENT SPECIFICATION</span>
+            <span style={{ opacity: 0.8, fontSize: '0.82rem', letterSpacing: '0.08em' }}>WORKFLOW</span>
+          </div>
+
+          <div style={{ padding: '1.25rem' }}>
+            {agentStats && agentStats.finalScore !== null ? (
+              <div className="agent-summary-card" style={{ marginBottom: '1.25rem', padding: '1rem', background: 'var(--surface-cream)', border: '1.5px dashed var(--border-dashed)', borderRadius: 'var(--radius-sm)' }}>
+                <h2 className="marker-blue-title" style={{ marginTop: 0 }}>🤖 Agent Performance Card</h2>
+                <div style={{ margin: '0.75rem 0', display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontFamily: 'var(--font-notes)', fontSize: '1.1rem', fontWeight: 700 }}>Iterations Performed:</span>
+                    <span className="badge" style={{ background: 'var(--banner-blue)', color: '#0c4a6e', padding: '0.2rem 0.65rem', borderRadius: 'var(--radius-pill)', border: '1px solid var(--contour-ink)', fontFamily: 'var(--font-mono)', fontSize: '0.82rem', fontWeight: 700 }}>
+                      {agentStats.iterations ?? 1} passes
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontFamily: 'var(--font-notes)', fontSize: '1.1rem', fontWeight: 700 }}>ATS Score Progression:</span>
+                    <span style={{ fontFamily: 'var(--font-title)', fontSize: '1.2rem', fontWeight: 700, color: 'var(--success)' }}>
+                      {agentStats.initialScore ?? 0}% → {agentStats.finalScore}%
+                      {agentStats.scoreImprovement && agentStats.scoreImprovement > 0 ? ` (+${agentStats.scoreImprovement}%)` : ''}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontFamily: 'var(--font-notes)', fontSize: '1.1rem', fontWeight: 700 }}>Fact-Checking Guardrail:</span>
+                    <span style={{ color: agentStats.isFactClean ? 'var(--success)' : 'var(--warning)', fontWeight: 700, fontFamily: 'var(--font-notes)', fontSize: '1.1rem' }}>
+                      {agentStats.isFactClean ? '✅ 100% Grounded (0 Hallucinations)' : '⚠️ Grounded with notes'}
+                    </span>
+                  </div>
                 </div>
               </div>
-              <hr style={{ margin: '1rem 0', opacity: 0.2 }} />
-            </div>
-          ) : null}
+            ) : null}
 
-          <h2>How the agentic flow works</h2>
-          <ul className="info-list">
-            <li><strong>Perception:</strong> Ingests resume & JD, extracting keywords and experience metrics.</li>
-            <li><strong>Drafter Agent:</strong> Produces role-targeted bullet points using high-impact action verbs.</li>
-            <li><strong>ATS Auditor Critic:</strong> Scans keyword density, bullet quantification, and ATS structure.</li>
-            <li><strong>Fact-Checker Guardrail:</strong> Verifies every technical skill against your source resume.</li>
-            <li><strong>Reflection Loop:</strong> Iterates until the resume meets ATS quality standards.</li>
-          </ul>
+            <h2 className="marker-blue-title" style={{ marginTop: 0 }}>How the agentic flow works</h2>
+            <ul className="note-bullets">
+              <li><strong>Perception:</strong> Ingests resume &amp; JD, extracting keywords and metrics.</li>
+              <li><strong>Drafter Agent:</strong> Produces role-targeted bullet points using active verbs.</li>
+              <li><strong>ATS Auditor Critic:</strong> Scans keyword density, quantification &amp; ATS structure.</li>
+              <li><strong>Fact-Checker:</strong> Verifies every technical skill against your source resume.</li>
+              <li><strong>Reflection Loop:</strong> Iterates until the resume hits the ATS quality threshold.</li>
+            </ul>
+          </div>
         </aside>
       </div>
 
       {/* When Agentic Optimization finishes: Display full on-screen preview & iteration history */}
       {loopResult ? (
-        <section className="panel" style={{ marginTop: '2rem', border: '1px solid #cbd5e1' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1rem' }}>
-            <div>
-              <span style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', color: '#10b981', letterSpacing: '0.05em' }}>
-                ✨ Optimization Complete
-              </span>
-              <h2 style={{ margin: '0.25rem 0 0 0', fontSize: '1.4rem' }}>
-                Refined Resume Preview
-              </h2>
-            </div>
-            <div style={{ display: 'flex', gap: '0.75rem' }}>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={handleCopyText}
-              >
-                {copied ? '✓ Copied!' : 'Copy to Clipboard'}
-              </button>
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={handleDownloadDocx}
-                disabled={downloading}
-              >
-                {downloading ? 'Preparing DOCX…' : '📥 Download DOCX'}
-              </button>
-            </div>
+        <section className="note-card" style={{ marginTop: '2rem' }}>
+          <div className="note-banner banner-teal">
+            <span>REFINED RESUME PREVIEW &amp; DOCX EXPORT</span>
+            <span style={{ opacity: 0.85, fontSize: '0.82rem', letterSpacing: '0.08em' }}>READY</span>
           </div>
 
-          {/* Iteration Timeline */}
-          {loopResult.iteration_history && loopResult.iteration_history.length > 1 ? (
-            <div style={{ background: '#f8fafc', padding: '1rem', borderRadius: '8px', marginBottom: '1.5rem', border: '1px solid #e2e8f0' }}>
-              <h3 style={{ fontSize: '0.95rem', fontWeight: 700, margin: '0 0 0.75rem 0', color: '#334155' }}>
-                🔄 Autonomous Refinement Timeline ({loopResult.iteration_history.length} iterations)
-              </h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                {loopResult.iteration_history.map((step) => (
-                  <div key={step.iteration} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.875rem' }}>
-                    <span>
-                      <strong>Pass #{step.iteration}:</strong> {step.refinement_prompt_used ?? 'Initial draft evaluated'}
-                    </span>
-                    <span style={{ fontWeight: 700, color: step.audit_result.overall_score >= 80 ? '#10b981' : '#f59e0b' }}>
-                      Score: {step.audit_result.overall_score}%
-                    </span>
-                  </div>
-                ))}
+          <div style={{ padding: '1.25rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1rem', borderBottom: '1.5px dashed var(--border-dashed)', paddingBottom: '0.75rem' }}>
+              <div>
+                <span style={{ fontSize: '0.85rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--success)', letterSpacing: '0.05em', fontFamily: 'var(--font-notes)' }}>
+                  ✨ Optimization Complete
+                </span>
+                <h2 style={{ margin: '0.15rem 0 0 0', fontFamily: 'var(--font-title)', fontSize: '1.5rem' }}>
+                  Auditor-Approved Resume Draft
+                </h2>
+              </div>
+              <div style={{ display: 'flex', gap: '0.75rem' }}>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={handleCopyText}
+                >
+                  {copied ? '✓ Copied!' : '📋 Copy Text'}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={handleDownloadDocx}
+                  disabled={downloading}
+                >
+                  {downloading ? 'Preparing DOCX…' : '📥 Download DOCX'}
+                </button>
               </div>
             </div>
-          ) : null}
 
-          {/* Full Draft Viewer */}
-          <textarea
-            readOnly
-            rows={18}
-            style={{
-              width: '100%',
-              fontFamily: 'monospace',
-              fontSize: '0.9rem',
-              lineHeight: '1.5',
-              padding: '1rem',
-              borderRadius: '8px',
-              border: '1px solid #cbd5e1',
-              background: '#ffffff',
-              color: '#0f172a',
-            }}
-            value={loopResult.final_draft}
-          />
+            {/* Iteration Timeline */}
+            {loopResult.iteration_history && loopResult.iteration_history.length > 1 ? (
+              <div style={{ background: 'var(--surface-cream)', padding: '1rem', borderRadius: 'var(--radius-sm)', marginBottom: '1.25rem', border: '1.5px dashed var(--border-dashed)' }}>
+                <h3 className="marker-blue-title" style={{ fontSize: '1.15rem', margin: '0 0 0.5rem 0' }}>
+                  🔄 Autonomous Refinement Timeline ({loopResult.iteration_history.length} iterations)
+                </h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  {loopResult.iteration_history.map((step) => (
+                    <div key={step.iteration} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.9rem', fontFamily: 'var(--font-body)' }}>
+                      <span>
+                        <strong>Pass #{step.iteration}:</strong> {step.refinement_prompt_used ?? 'Initial draft evaluated'}
+                      </span>
+                      <span style={{ fontWeight: 700, fontFamily: 'var(--font-title)', color: step.audit_result.overall_score >= 80 ? 'var(--success)' : 'var(--warning)' }}>
+                        Score: {step.audit_result.overall_score}%
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            {/* Full Draft Viewer */}
+            <textarea
+              readOnly
+              rows={18}
+              style={{
+                width: '100%',
+                fontFamily: 'var(--font-mono)',
+                fontSize: '0.88rem',
+                lineHeight: '1.6',
+                padding: '1rem',
+                borderRadius: 'var(--radius-sm)',
+                border: 'var(--border-width) solid var(--contour-ink)',
+                background: 'var(--surface-card)',
+                color: 'var(--text)',
+                boxShadow: 'inset 1px 1px 3px rgba(0, 0, 0, 0.05)',
+              }}
+              value={loopResult.final_draft}
+            />
+          </div>
         </section>
       ) : null}
     </div>
   )
 }
+

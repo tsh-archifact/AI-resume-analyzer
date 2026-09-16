@@ -85,97 +85,118 @@ export function ComparePage() {
       </header>
 
       <div className="workspace-grid">
-        <form className="panel form-panel" onSubmit={handleSubmit}>
-          <FileUpload
-            id="compare-resume"
-            label="Resume"
-            hint="PDF, DOC, or DOCX"
-            accept={RESUME_ACCEPT}
-            file={resume}
-            onChange={setResume}
-          />
+        <form className="note-card form-panel" onSubmit={handleSubmit}>
+          <div className="note-banner banner-peach">
+            <span>RESUME &amp; JOB INPUT</span>
+            <span style={{ opacity: 0.8, fontSize: '0.82rem', letterSpacing: '0.08em' }}>INPUT</span>
+          </div>
 
-          <fieldset className="mode-toggle">
-            <legend>Job description input</legend>
-            <label>
-              <input
-                type="radio"
-                name="jd-mode"
-                checked={jdMode === 'text'}
-                onChange={() => setJdMode('text')}
-              />
-              Paste text
-            </label>
-            <label>
-              <input
-                type="radio"
-                name="jd-mode"
-                checked={jdMode === 'file'}
-                onChange={() => setJdMode('file')}
-              />
-              Upload file
-            </label>
-          </fieldset>
-
-          {jdMode === 'text' ? (
-            <div className="field">
-              <label htmlFor="jd-text">Job description</label>
-              <textarea
-                id="jd-text"
-                rows={10}
-                placeholder="Paste the full job description here…"
-                value={jdText}
-                onChange={(event) => setJdText(event.target.value)}
-              />
-            </div>
-          ) : (
+          <div className="form-panel-body">
             <FileUpload
-              id="compare-jd"
-              label="Job description file"
-              hint="PDF, DOC, DOCX, TXT, PNG, JPG, or JPEG"
-              accept={JD_ACCEPT}
-              file={jdFile}
-              onChange={setJdFile}
+              id="compare-resume"
+              label="Candidate Resume"
+              hint="PDF, DOC, or DOCX"
+              accept={RESUME_ACCEPT}
+              file={resume}
+              onChange={setResume}
             />
-          )}
 
-          {error ? <p className="form-error">{error}</p> : null}
+            <fieldset className="mode-toggle">
+              <legend>Job description input mode</legend>
+              <label>
+                <input
+                  type="radio"
+                  name="jd-mode"
+                  checked={jdMode === 'text'}
+                  onChange={() => setJdMode('text')}
+                />
+                ✏️ Paste text
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  name="jd-mode"
+                  checked={jdMode === 'file'}
+                  onChange={() => setJdMode('file')}
+                />
+                📁 Upload file
+              </label>
+            </fieldset>
 
-          <button type="submit" className="btn btn-primary btn-block" disabled={submitting}>
-            {submitting ? 'Analyzing…' : 'Run comparison'}
-          </button>
+            {jdMode === 'text' ? (
+              <div className="field">
+                <label htmlFor="jd-text">Target Job Description</label>
+                <textarea
+                  id="jd-text"
+                  rows={9}
+                  placeholder="Paste job description, requirements, or tech stack here…"
+                  value={jdText}
+                  onChange={(event) => setJdText(event.target.value)}
+                />
+              </div>
+            ) : (
+              <FileUpload
+                id="compare-jd"
+                label="Job Description File"
+                hint="PDF, DOC, DOCX, TXT, PNG, JPG, or JPEG"
+                accept={JD_ACCEPT}
+                file={jdFile}
+                onChange={setJdFile}
+              />
+            )}
+
+            {error ? <p className="form-error">{error}</p> : null}
+
+            <button type="submit" className="btn btn-primary btn-block" disabled={submitting}>
+              {submitting ? 'Analyzing Notes…' : 'Run Role Comparison'}
+            </button>
+          </div>
         </form>
 
         <div className="results-stack">
           {!result && !submitting ? (
-            <div className="panel empty-panel">
+            <div className="note-card empty-panel">
+              <div className="note-banner banner-peach" style={{ width: '100%', margin: '-2rem -2rem 1.5rem' }}>
+                <span>SCORECARD &amp; ANALYSIS</span>
+                <span style={{ opacity: 0.8, fontSize: '0.82rem' }}>READY</span>
+              </div>
               <h2>Results appear here</h2>
               <p>Submit a resume and job description to see skill overlap and AI recommendations.</p>
             </div>
           ) : null}
 
           {submitting ? (
-            <div className="panel empty-panel">
+            <div className="note-card empty-panel">
+              <div className="note-banner banner-peach" style={{ width: '100%', margin: '-2rem -2rem 1.5rem' }}>
+                <span>ATS AUDIT IN PROGRESS</span>
+                <span style={{ opacity: 0.8, fontSize: '0.82rem' }}>PROCESSING</span>
+              </div>
               <div className="spinner" aria-hidden="true" />
-              <p>Extracting text, identifying skills, and generating analysis…</p>
+              <p>Extracting skills, computing ATS alignment, and generating notes…</p>
             </div>
           ) : null}
 
           {result ? (
             <>
-              <div className="panel results-summary">
-                <MatchScore
-                  score={result.similarity.match_score}
-                  overallFit={result.llm_analysis?.overall_fit}
-                />
-                <div className="file-meta">
-                  <p>
-                    <strong>Resume:</strong> {result.resume_file ?? 'Uploaded resume'}
-                  </p>
-                  <p>
-                    <strong>Job description:</strong>{' '}
-                    {result.job_description_file ?? (jdMode === 'text' ? 'Pasted text' : 'Uploaded file')}
-                  </p>
+              <div className="note-card results-summary" style={{ padding: 0, overflow: 'hidden' }}>
+                <div className="note-banner banner-peach" style={{ width: '100%' }}>
+                  <span>ATS MATCH SCORECARD</span>
+                  <span style={{ opacity: 0.8, fontSize: '0.82rem', letterSpacing: '0.08em' }}>VERIFIED</span>
+                </div>
+                <div style={{ padding: '1.25rem', width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+                  <MatchScore
+                    score={result.similarity.match_score}
+                    overallFit={result.llm_analysis?.overall_fit}
+                  />
+                  <div className="file-meta" style={{ fontFamily: 'var(--font-notes)', fontSize: '1.1rem' }}>
+                    <p style={{ margin: '0 0 0.3rem' }}>
+                      <strong>Resume:</strong> {result.resume_file ?? 'Uploaded resume'}
+                    </p>
+                    <p style={{ margin: 0 }}>
+                      <strong>Job description:</strong>{' '}
+                      {result.job_description_file ?? (jdMode === 'text' ? 'Pasted text' : 'Uploaded file')}
+                    </p>
+                  </div>
                 </div>
               </div>
 
