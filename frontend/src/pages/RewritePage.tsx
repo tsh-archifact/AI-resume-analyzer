@@ -1,13 +1,78 @@
-import { useState, type FormEvent } from 'react'
+import { useState, useEffect, type FormEvent } from 'react'
 
-import { runAgentRewrite, exportDocx, type AgentRewriteMetadata } from '../api/resume'
+import {
+  runAgentRewrite,
+  exportDocx,
+  getResumeTemplates,
+  type AgentRewriteMetadata,
+  type ResumeTemplateInfo,
+} from '../api/resume'
 import { ApiRequestError } from '../api/client'
 import { FileUpload } from '../components/FileUpload'
 import { useAuth } from '../context/AuthContext'
-import type { RefinementLoopResult } from '../types/api'
+import type { RefinementLoopResult, AgentIterationStep } from '../types/api'
+
 
 const RESUME_ACCEPT = '.pdf,.doc,.docx'
 const JD_ACCEPT = '.pdf,.doc,.docx,.txt,.png,.jpg,.jpeg'
+
+const DEFAULT_TEMPLATES: ResumeTemplateInfo[] = [
+  {
+    template_id: 'modern_teal',
+    name: 'Modern Minimalist',
+    description: 'Clean sans-serif layout with deep teal accents. Ideal for tech, product, and modern businesses.',
+    persona: 'Recommended for Tech, Product, & Startups',
+    font_family: 'Calibri',
+    accent_hex: '#0F766E',
+    secondary_hex: '#475569',
+    features: ['Teal section underline', 'Calibri clean sans', 'Modern layout'],
+    is_default: true,
+  },
+  {
+    template_id: 'executive_navy',
+    name: 'Executive Classic',
+    description: 'Authoritative serif typography in rich navy blue. Engineered for leadership, finance, and consulting.',
+    persona: 'Recommended for Leadership, Finance, & Consulting',
+    font_family: 'Georgia',
+    accent_hex: '#1E3A8A',
+    secondary_hex: '#334155',
+    features: ['Centered prestige header', 'Georgia elegant serif', 'Navy dividers'],
+    is_default: false,
+  },
+  {
+    template_id: 'tech_indigo',
+    name: 'Tech & Developer',
+    description: 'Modern high-clarity typography with electric indigo accents. Tailored for software engineers and DevOps.',
+    persona: 'Recommended for Software Engineers & DevOps',
+    font_family: 'Segoe UI',
+    accent_hex: '#4338CA',
+    secondary_hex: '#374151',
+    features: ['Indigo accent line', 'Segoe UI tech font', 'Clean compact bullets'],
+    is_default: false,
+  },
+  {
+    template_id: 'elegant_burgundy',
+    name: 'Elegant Academic',
+    description: 'Refined serif aesthetic with deep burgundy accents. Perfect for academia, research, and writing.',
+    persona: 'Recommended for Academia, Research, & Medical',
+    font_family: 'Cambria',
+    accent_hex: '#881337',
+    secondary_hex: '#4A5568',
+    features: ['Centered title', 'Deep burgundy styling', 'Cambria academic serif'],
+    is_default: false,
+  },
+  {
+    template_id: 'compact_slate',
+    name: 'Compact High-Density',
+    description: 'Space-efficient, high-density layout designed to fit extensive career histories into fewer pages.',
+    persona: 'Recommended for Multi-Page Content / Maximum Space',
+    font_family: 'Arial',
+    accent_hex: '#1F2937',
+    secondary_hex: '#4B5563',
+    features: ['Slim 0.55-in margins', 'High data density', 'Graphite ATS-optimized'],
+    is_default: false,
+  },
+]
 
 export function RewritePage() {
   const { token } = useAuth()
@@ -22,6 +87,22 @@ export function RewritePage() {
   const [submitting, setSubmitting] = useState(false)
   const [downloading, setDownloading] = useState(false)
   const [copied, setCopied] = useState(false)
+
+  const [templates, setTemplates] = useState<ResumeTemplateInfo[]>(DEFAULT_TEMPLATES)
+  const [selectedTemplate, setSelectedTemplate] = useState<string>('modern_teal')
+
+  useEffect(() => {
+    if (!token) return
+    getResumeTemplates(token)
+      .then((items) => {
+        if (items && items.length) {
+          setTemplates(items)
+        }
+      })
+      .catch(() => {
+        // Fallback already pre-populated
+      })
+  }, [token])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -92,11 +173,11 @@ export function RewritePage() {
     if (!loopResult || !token) return
     setDownloading(true)
     try {
-      const blob = await exportDocx(loopResult.final_draft, token)
+      const blob = await exportDocx(loopResult.final_draft, token, selectedTemplate)
       const url = URL.createObjectURL(blob)
       const anchor = document.createElement('a')
       anchor.href = url
-      anchor.download = 'optimized_resume.docx'
+      anchor.download = `optimized_resume_${selectedTemplate}.docx`
       anchor.click()
       URL.revokeObjectURL(url)
     } catch (err) {
@@ -274,8 +355,64 @@ export function RewritePage() {
                   onClick={handleDownloadDocx}
                   disabled={downloading}
                 >
-                  {downloading ? 'Preparing DOCX…' : '📥 Download DOCX'}
+                  {downloading
+                    ? 'Preparing DOCX…'
+                    : `📥 Download DOCX (${templates.find((t) => t.template_id === selectedTemplate)?.name ?? 'Default'})`}
                 </button>
+              </div>
+            </div>
+
+            {/* Template Selector */}
+            <div className="template-picker-section">
+              <div className="template-picker-header">
+                <div>
+                  <h3 className="marker-blue-title" style={{ margin: 0, fontSize: '1.15rem' }}>
+                    🎨 Select DOCX Template Style
+                  </h3>
+                  <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                    Pick one of 5 ATS-compliant formatting designs for your exported Word document.
+                  </p>
+                </div>
+                <div className="template-active-badge">
+                  Selected: <strong>{templates.find((t) => t.template_id === selectedTemplate)?.name}</strong>
+                </div>
+              </div>
+
+              <div className="template-grid">
+                {templates.map((tpl) => {
+                  const isSelected = tpl.template_id === selectedTemplate
+                  return (
+                    <div
+                      key={tpl.template_id}
+                      className={`template-card ${isSelected ? 'template-card-selected' : ''}`}
+                      onClick={() => setSelectedTemplate(tpl.template_id)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          setSelectedTemplate(tpl.template_id)
+                        }
+                      }}
+                    >
+                      <div className="template-card-header">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <span
+                            className="template-swatch"
+                            style={{ backgroundColor: tpl.accent_hex }}
+                            title={`Accent: ${tpl.accent_hex}`}
+                          />
+                          <span className="template-name">{tpl.name}</span>
+                        </div>
+                        {isSelected && <span className="template-check">✓ Active</span>}
+                      </div>
+                      <div className="template-meta">
+                        <span className="template-font-tag">Font: {tpl.font_family}</span>
+                        <span className="template-persona-tag">{tpl.persona}</span>
+                      </div>
+                      <p className="template-desc">{tpl.description}</p>
+                    </div>
+                  )
+                })}
               </div>
             </div>
 
@@ -286,7 +423,7 @@ export function RewritePage() {
                   🔄 Autonomous Refinement Timeline ({loopResult.iteration_history.length} iterations)
                 </h3>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  {loopResult.iteration_history.map((step) => (
+                  {loopResult.iteration_history.map((step: AgentIterationStep) => (
                     <div key={step.iteration} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.9rem', fontFamily: 'var(--font-body)' }}>
                       <span>
                         <strong>Pass #{step.iteration}:</strong> {step.refinement_prompt_used ?? 'Initial draft evaluated'}

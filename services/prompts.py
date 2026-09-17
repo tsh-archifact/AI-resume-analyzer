@@ -3,6 +3,30 @@ import json
 from schemas.resume import JobDescriptionSkills, ResumeSkills
 
 
+def build_skill_extraction_prompt(text: str, label: str) -> str:
+    print("The text is : \n",text)
+    print("The label is : \n",label)
+    return f"""
+You are a resume and job-description information extraction system.
+Extract skills from the {label} text below.
+
+Rules:
+- Extract only skills explicitly present in the source text.
+- Return atomic skills, tools, frameworks, platforms, databases, methods, and technologies.
+- Convert sentences into skill names. For example, "built APIs with Express.js" becomes "Express.js".
+- Do not extract job titles, employers, locations, degrees, responsibilities, benefits, or section headings.
+- Preserve meaningful versions, such as "Python 3" or ".NET 8".
+- Do not infer equivalent skills. If the text says "Postgres", return "Postgres"; do not silently change it to "PostgreSQL".
+- Remove duplicates while preserving the clearest source wording.
+
+Return ONLY a valid JSON object matching this schema exactly:
+{{"skills": ["Skill 1", "Skill 2", "Skill 3"]}}
+
+Text:
+{text[:6000]}
+"""
+
+
 def build_profile_extraction_prompt(text: str, document_type: str) -> str:
 
     if document_type == "resume":

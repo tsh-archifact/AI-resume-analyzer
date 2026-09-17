@@ -124,49 +124,9 @@ def _looks_like_heading(line: str) -> bool:
     return len(alpha_chars) >= 3 and all(c.isupper() for c in alpha_chars)
 
 
-def write_resume_docx(resume_text: str) -> str:
-    """Write a styled DOCX from the rewritten resume plain text.
+def write_resume_docx(resume_text: str, template_id: str = "modern_teal") -> str:
+    """Write a styled DOCX from the rewritten resume markdown or plain text using the selected template."""
+    from services.docx_generator_service import generate_resume_docx
 
-    Improvements over plain paragraph-per-line approach:
-    - Calibri 11pt default body font for a professional look.
-    - ALL-CAPS section lines (e.g. EXPERIENCE, EDUCATION) → Heading 2 style
-      with teal accent colour matching the app palette.
-    - Proper paragraph spacing (6pt after body paragraphs).
-    - Empty lines produce compact spacers instead of blank paragraphs.
-    """
-    document = Document()
+    return generate_resume_docx(resume_text, template_id=template_id)
 
-    # --- Set default body font ---
-    style_normal = document.styles["Normal"]
-    style_normal.font.name = "Calibri"
-    style_normal.font.size = Pt(11)
-
-    # --- Customise Heading 2 to match the app's teal primary colour ---
-    style_h2 = document.styles["Heading 2"]
-    style_h2.font.name = "Calibri"
-    style_h2.font.size = Pt(12)
-    style_h2.font.bold = True
-    style_h2.font.color.rgb = RGBColor(0x14, 0xB8, 0x90)  # --primary-strong
-
-    lines = resume_text.split("\n")
-
-    for line in lines:
-        stripped = line.strip()
-
-        if not stripped:
-            # Compact spacer — add a tiny empty paragraph
-            spacer = document.add_paragraph("")
-            spacer.paragraph_format.space_after = Pt(2)
-            continue
-
-        if _looks_like_heading(stripped):
-            document.add_heading(stripped, level=2)
-        else:
-            para = document.add_paragraph(stripped)
-            para.paragraph_format.space_after = Pt(6)
-
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as tmp:
-        temp_docx_path = tmp.name
-
-    document.save(temp_docx_path)
-    return temp_docx_path

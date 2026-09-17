@@ -14,6 +14,10 @@ from pathlib import Path
 
 import easyocr
 
+from utils.logger import get_pipeline_logger
+
+logger = get_pipeline_logger()
+
 # Module-level singleton so the heavy EasyOCR model loads only once.
 _ocr_reader: easyocr.Reader | None = None
 
@@ -77,7 +81,9 @@ def clean_text(raw_text: str | list[str]) -> str:
     text = re.sub(r" *\n *", "\n", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
 
-    return text.strip()
+    cleaned = text.strip()
+    logger.info(f"[TEXT CLEANING] Normalized text: {len(cleaned)} characters retained.")
+    return cleaned
 
 
 # ---------------------------------------------------------------------------
@@ -258,17 +264,34 @@ def extract_text_from_file(file_path: str | Path) -> str:
     path = Path(file_path)
     suffix = path.suffix.lower()
 
+    logger.info(f"[FILE INGESTION] Starting extraction for file: {path.name} (type: {suffix or 'none'})")
+
     if suffix == ".pdf":
-        return extract_text_from_pdf(path)
-    if suffix == ".docx":
-        return extract_text_from_docx(path)
-    if suffix == ".doc":
+        result = extract_text_from_pdf(path)
+    elif suffix == ".docx":
+        result = extract_text_from_docx(path)
+    elif suffix == ".doc":
+        logger.error(f"[FILE INGESTION] Unsupported legacy .doc format: {path.name}")
         raise ValueError(
             "Legacy .doc format is not supported. Please convert to .docx or .pdf before uploading."
         )
-    if suffix in {".txt", ".md", ".csv", ".rtf"}:
-        return extract_text_from_txt(path)
-    if suffix in {".png", ".jpg", ".jpeg"}:
-        return extract_text_from_image(path)
+    elif suffix in {".txt", ".md", ".csv", ".rtf"}:
+        result = extract_text_from_txt(path)
+    elif suffix in {".png", ".jpg", ".jpeg"}:
+        result = extract_text_from_image(path)
+    else:
+        logger.error(f"[FILE INGESTION] Unsupported file type: {path.suffix or 'no extension'}")
+        raise ValueError(f"Unsupported file type: {path.suffix or 'no extension'}")
 
-    raise ValueError(f"Unsupported file type: {path.suffix or 'no extension'}")
+    logger.info(f"[FILE INGESTION] Successfully extracted text from {path.name}: {len(result)} characters.")
+    return result
+
+
+def extract_markdown_from_file(file_path: str | Path) -> str:
+    """Extracts text from file and converts it into structured Markdown format."""
+    from services.markdown_converter_service import convert_cleaned_text_to_markdown
+
+    path = Path(file_path)
+    logger.info(f"[PIPELINE STEP: MARKDOWN] Converting {path.name} to Markdown...")
+    extracted_text = extract_text_from_file(path)
+    return convert_cleaned_text_to_markdown(extracted_text, document_title=path.stem)

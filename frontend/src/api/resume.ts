@@ -116,7 +116,24 @@ export async function runAgentRewrite(
   )
 }
 
-export async function exportDocx(content: string, token: string): Promise<Blob> {
+export interface ResumeTemplateInfo {
+  template_id: string
+  name: string
+  description: string
+  persona: string
+  font_family: string
+  accent_hex: string
+  secondary_hex: string
+  features: string[]
+  is_default: boolean
+}
+
+export async function getResumeTemplates(token: string): Promise<ResumeTemplateInfo[]> {
+  const data = await apiFetch<{ templates: ResumeTemplateInfo[] }>('/agent/templates', {}, token)
+  return data.templates
+}
+
+export async function exportDocx(content: string, token: string, templateId: string = 'modern_teal'): Promise<Blob> {
   const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
   const response = await fetch(`${API_BASE}/agent/export-docx`, {
     method: 'POST',
@@ -124,11 +141,12 @@ export async function exportDocx(content: string, token: string): Promise<Blob> 
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify({ content }),
+    body: JSON.stringify({ content, template_id: templateId }),
   })
   if (!response.ok) {
     throw new ApiRequestError('Failed to generate DOCX from text', response.status)
   }
   return response.blob()
 }
+
 

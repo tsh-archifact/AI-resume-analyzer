@@ -10,6 +10,7 @@ Compatibility shim — re-exports all public symbols from
 
 from services.text_extraction_service import (
     clean_text,
+    extract_markdown_from_file,
     extract_text_from_docx,
     extract_text_from_file,
     extract_text_from_image,
@@ -20,6 +21,7 @@ from services.text_extraction_service import (
 
 __all__ = [
     "clean_text",
+    "extract_markdown_from_file",
     "extract_text_from_docx",
     "extract_text_from_file",
     "extract_text_from_image",
