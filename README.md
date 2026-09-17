@@ -28,10 +28,9 @@ FastAPI service for extracting resume and job-description text, comparing skills
 
 ### Current Limitations and Follow-ups
 
-- The `test/` directory is currently empty; automated tests still need to be added.
+- Automated pytest suite is established under `test/` with 29 passing unit and integration tests.
 - EasyOCR initializes a reader for each image extraction, so OCR can be slow and resource-heavy. A shared reader could improve repeated requests.
 - OCR currently supports English only: `easyocr.Reader(["en"])`.
-- `ocr_data.py` is an older compatibility wrapper and does not re-export `extract_text_from_image`; use `services.text_extraction_service` or `ingestion_data.py` for the complete API.
 - Resume rewriting intentionally has no local fallback. It returns an API error when the LLM is unavailable.
 - Resume comparison and skill extraction still use local heuristic fallbacks when the LLM is unavailable.
 - Structured comparison requires both the configured LLM and spaCy model; it returns HTTP `503` when either is unavailable.
@@ -134,22 +133,29 @@ Interactive API documentation is available at `/docs` while the server is runnin
 
 ```text
 main.py                         FastAPI app factory and Uvicorn entrypoint
-api/routes.py                   HTTP routes and request orchestration
+api/routes.py                   Aggregator router preserving canonical API routes
+api/resume_routes.py            Resume extraction, comparison, and health routes
+api/agent_routes.py             Agent reflection rewrite, templates, and DOCX routes
+api/auth_routes.py              Authentication and user registration routes
 config/llm_setup.py             Provider, model, and API-key configuration
-schemas/resume.py               Pydantic request and response models
+schemas/resume.py               Pydantic resume and JD data models
+schemas/agent.py                Pydantic multi-agent audit and reflection models
 services/text_extraction_service.py
-																PDF, DOCX, text, and image OCR extraction
+                                PDF, DOCX, text, and image OCR extraction
+services/markdown_converter_service.py
+                                Structured markdown formatting for resumes & JDs
 services/skill_service.py       LLM and heuristic skill extraction/comparison
 services/analysis_service.py    Structured LLM and rule-based analysis
 services/resume_rewrite_service.py
-																LLM resume rewriting and explicit errors
+                                Orchestration for LLM and agentic resume rewriting
+services/docx_generator_service.py
+                                ATS-compliant DOCX resume generator with 5 templates
+services/agents/                Autonomous multi-agent system (Auditor, Drafter, Fact-Checker)
 services/prompts.py             Prompts for skill extraction, analysis, and rewriting
-utils/file_utils.py             Upload validation, temp files, and DOCX generation
-ingestion_data.py                Compatibility exports for extraction helpers
-ocr_data.py                     Older compatibility extraction exports
-test/                            Intended location for automated tests
-dataset/                         Local dataset workspace
-prompts/                         Local prompt workspace
+utils/file_utils.py             Upload validation, temp files, and JD resolution
+utils/logger.py                 Centralized pipeline logging (logs/pipeline.log)
+utils/limiter.py                SlowAPI rate limiting configuration
+test/                           Automated pytest test suite (29 tests)
 ```
 
 ## Setup

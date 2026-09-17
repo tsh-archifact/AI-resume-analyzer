@@ -1,2 +1,0 @@
-Skills: Python, SQL, Machine Learning, Data Analysis
-Experience: Built dashboards and analytics reports.
