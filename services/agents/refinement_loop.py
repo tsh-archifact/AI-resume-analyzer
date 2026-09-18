@@ -1,3 +1,6 @@
+from collections.abc import Callable
+from typing import Any
+
 from schemas.agent import (
     AgentIterationStep,
     ATSAuditResult,
@@ -18,6 +21,7 @@ def run_self_refining_loop(
     initial_draft: str | None = None,
     use_llm_semantic_critique: bool = False,
     enforce_fact_check: bool = True,
+    progress_callback: Callable[[dict[str, Any]], None] | None = None,
 ) -> RefinementLoopResult:
     """
     Executes an autonomous Draft -> Critique -> Fact-Check -> Refine loop.
@@ -30,12 +34,36 @@ def run_self_refining_loop(
     5. Repeats until target_score and factuality are achieved or max_iterations is reached.
     """
     if target_skills is None:
+        if progress_callback:
+            progress_callback({
+                "agent": "Perception Agent",
+                "title": "Extracting Target Skills",
+                "thought": "Extracting key competencies and technical qualifications from the target job description...",
+                "progress": 10,
+            })
         target_skills = extract_skills_from_text(jd_text, section_name="job_description_skills")
 
     iteration_history: list[AgentIterationStep] = []
     
     # --- Iteration 1: Initial Draft, Baseline Audit & Fact-Check ---
+    if progress_callback:
+        progress_callback({
+            "agent": "Drafter Agent",
+            "title": "Drafting Initial Resume",
+            "thought": "Transforming candidate experience using the Google XYZ formula (Accomplished [X], measured by [Y], by doing [Z])...",
+            "iteration": 1,
+            "progress": 25,
+        })
     current_draft = initial_draft if initial_draft is not None else generate_initial_draft(resume_text, jd_text)
+
+    if progress_callback:
+        progress_callback({
+            "agent": "ATS Auditor Critic",
+            "title": "Auditing Baseline Draft",
+            "thought": "Auditing draft for keyword coverage, action verbs, and Flesch-Kincaid reading grade level...",
+            "iteration": 1,
+            "progress": 40,
+        })
     audit = audit_resume_draft(
         current_draft,
         jd_text,
@@ -43,6 +71,14 @@ def run_self_refining_loop(
         use_llm_critique=use_llm_semantic_critique,
     )
 
+    if progress_callback and enforce_fact_check:
+        progress_callback({
+            "agent": "Fact-Checking Guardrail",
+            "title": "Verifying Factual Grounding",
+            "thought": "Cross-checking rewritten skills and claims against the original resume to prevent hallucinations...",
+            "iteration": 1,
+            "progress": 55,
+        })
     fact_check = verify_resume_truthfulness(current_draft, resume_text) if enforce_fact_check else None
 
     # Combine ATS critiques with any fact-check violation critiques
@@ -71,7 +107,25 @@ def run_self_refining_loop(
 
     # If the initial draft meets target threshold, is factually clean, or max_iterations <= 1, return immediately
     initial_clean = fact_check.is_clean if fact_check else True
+    if progress_callback:
+        progress_callback({
+            "agent": "Supervisor Agent",
+            "title": "Pass 1 Evaluation",
+            "thought": f"Pass 1 evaluated: ATS Score is {audit.overall_score}% (Target: {target_score}%). Grounding verified: {initial_clean}.",
+            "score": audit.overall_score,
+            "iteration": 1,
+            "progress": 65,
+        })
+
     if (audit.overall_score >= target_score and initial_clean) or max_iterations <= 1:
+        if progress_callback:
+            progress_callback({
+                "agent": "Supervisor Agent",
+                "title": "Optimization Complete",
+                "thought": f"Target threshold met on pass 1 ({best_audit.overall_score}% >= {target_score}%). Finalizing output.",
+                "score": best_audit.overall_score,
+                "progress": 100,
+            })
         return RefinementLoopResult(
             final_draft=best_draft,
             initial_score=initial_score,
@@ -90,6 +144,15 @@ def run_self_refining_loop(
         if not active_critiques:
             break
 
+        if progress_callback:
+            progress_callback({
+                "agent": "Drafter Agent",
+                "title": f"Refining Draft (Pass {iteration_num})",
+                "thought": f"Refining resume bullets to address {len(active_critiques)} feedback items from ATS Auditor and Fact-Checker...",
+                "iteration": iteration_num,
+                "progress": min(65 + (iteration_num - 1) * 10, 88),
+            })
+
         refined_draft = refine_draft(
             current_draft=best_draft,
             jd_text=jd_text,
@@ -97,12 +160,30 @@ def run_self_refining_loop(
             critiques=active_critiques,
         )
 
+        if progress_callback:
+            progress_callback({
+                "agent": "ATS Auditor Critic",
+                "title": f"Re-Auditing Draft (Pass {iteration_num})",
+                "thought": f"Checking keyword coverage and readability grade on refined draft (Pass {iteration_num})...",
+                "iteration": iteration_num,
+                "progress": min(70 + (iteration_num - 1) * 10, 92),
+            })
+
         new_audit = audit_resume_draft(
             refined_draft,
             jd_text,
             target_skills=target_skills,
             use_llm_critique=use_llm_semantic_critique,
         )
+
+        if progress_callback and enforce_fact_check:
+            progress_callback({
+                "agent": "Fact-Checking Guardrail",
+                "title": f"Verifying Truthfulness (Pass {iteration_num})",
+                "thought": f"Cross-checking refined draft {iteration_num} against source resume to guarantee zero hallucinations...",
+                "iteration": iteration_num,
+                "progress": min(75 + (iteration_num - 1) * 10, 95),
+            })
 
         new_fact_check = verify_resume_truthfulness(refined_draft, resume_text) if enforce_fact_check else None
 
@@ -144,6 +225,15 @@ def run_self_refining_loop(
 
     score_improvement = round(best_audit.overall_score - initial_score, 1)
     target_met = best_audit.overall_score >= target_score and (best_fact_check.is_clean if best_fact_check else True)
+
+    if progress_callback:
+        progress_callback({
+            "agent": "Supervisor Agent",
+            "title": "Refinement Complete",
+            "thought": f"Multi-agent refinement complete! Initial ATS: {initial_score}% -> Final ATS: {best_audit.overall_score}% ({score_improvement:+} pts). Fact-check clean: {best_fact_check.is_clean if best_fact_check else True}.",
+            "score": best_audit.overall_score,
+            "progress": 100,
+        })
 
     return RefinementLoopResult(
         final_draft=best_draft,

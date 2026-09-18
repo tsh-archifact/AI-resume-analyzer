@@ -1,7 +1,9 @@
+import asyncio
+import json
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 
 from schemas.agent import RefinementLoopResult
@@ -136,6 +138,87 @@ async def agent_rewrite_endpoint(
             raise HTTPException(status_code=503, detail=str(error)) from error
     finally:
         remove_temp_files(resume_path, jd_path)
+
+
+@router.post("/agent/rewrite-stream")
+async def agent_rewrite_stream_endpoint(
+    resume: UploadFile = File(...),
+    job_description: UploadFile | None = File(None),
+    job_description_text: str | None = Form(None),
+    target_score: float = Form(80.0),
+    max_iterations: int = Form(3),
+    _current_user: dict = Depends(get_current_user),
+):
+    """Streams live multi-agent reflection loop progress and thoughts as Drafter, Auditor, and Fact-Checker iterate."""
+    username = _current_user.get("username", "anonymous")
+    logger.info(f"[PIPELINE START: AGENT REWRITE STREAM] User '{username}' started streaming rewrite (Target: {target_score}, Max: {max_iterations})")
+
+    validate_upload_file(resume, RESUME_UPLOAD_EXTENSIONS)
+    resume_path = await save_upload_to_temp_file(resume)
+    jd_path, jd_text, _ = await resolve_job_description(job_description, job_description_text)
+
+    async def event_generator():
+        queue: asyncio.Queue = asyncio.Queue()
+        loop = asyncio.get_running_loop()
+
+        def push_event(event: dict):
+            loop.call_soon_threadsafe(queue.put_nowait, event)
+
+        def worker():
+            try:
+                push_event({
+                    "type": "thought",
+                    "agent": "Perception Agent",
+                    "title": "Ingesting Documents",
+                    "thought": f"Extracting text from resume ({resume.filename}) and target job description...",
+                    "progress": 10,
+                })
+                raw_resume_text = extract_text_from_file(resume_path)
+                resume_markdown = convert_cleaned_text_to_markdown(raw_resume_text, document_title=Path(resume.filename or "Resume").stem)
+                jd_markdown = convert_cleaned_text_to_markdown(jd_text, document_title="Job Description")
+
+                push_event({
+                    "type": "thought",
+                    "agent": "Supervisor Agent",
+                    "title": "Initiating Reflection Loop",
+                    "thought": f"Starting autonomous Drafter -> ATS Auditor -> Fact-Checker loop. Target score: {target_score}%.",
+                    "progress": 20,
+                })
+
+                def on_progress(p: dict):
+                    push_event({"type": "thought", **p})
+
+                result = rewrite_resume_with_agent(
+                    resume_text=resume_markdown,
+                    jd_text=jd_markdown,
+                    target_score=target_score,
+                    max_iterations=max_iterations,
+                    progress_callback=on_progress,
+                )
+
+                push_event({
+                    "type": "complete",
+                    "agent": "Supervisor Agent",
+                    "title": "Rewrite Complete",
+                    "thought": f"Multi-agent rewrite completed ({result.iterations_count} iterations). Score: {result.initial_score}% -> {result.final_score}%.",
+                    "progress": 100,
+                    "result": result.model_dump(mode="json"),
+                })
+            except Exception as exc:
+                logger.error(f"[PIPELINE ERROR: REWRITE STREAM] {exc}")
+                push_event({"type": "error", "error": str(exc)})
+            finally:
+                remove_temp_files(resume_path, jd_path)
+
+        asyncio.create_task(asyncio.to_thread(worker))
+
+        while True:
+            event = await queue.get()
+            yield json.dumps(event) + "\n"
+            if event.get("type") in ("complete", "error"):
+                break
+
+    return StreamingResponse(event_generator(), media_type="application/x-ndjson")
 
 
 class ExportDocxPayload(BaseModel):

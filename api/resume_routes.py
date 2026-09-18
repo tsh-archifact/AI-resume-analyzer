@@ -1,6 +1,9 @@
+import asyncio
+import json
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import StreamingResponse
 
 from schemas.resume import (
     JobDescriptionSkills,
@@ -144,3 +147,126 @@ async def compare_resume(
         )
     finally:
         remove_temp_files(resume_path, jd_path)
+
+
+@router.post("/compare-resume-stream")
+async def compare_resume_stream(
+    resume: UploadFile = File(...),
+    job_description: UploadFile | None = File(None),
+    job_description_text: str | None = Form(None),
+    _current_user: dict = Depends(get_current_user),
+):
+    """Streams live agent thoughts and reasoning progress while comparing a resume to a job description."""
+    username = _current_user.get("username", "anonymous")
+    logger.info(f"[PIPELINE START: COMPARE STREAM] User '{username}' started streaming comparison for: {resume.filename}")
+
+    validate_upload_file(resume, RESUME_UPLOAD_EXTENSIONS)
+    resume_path = await save_upload_to_temp_file(resume)
+    jd_path, jd_text, jd_filename = await resolve_job_description(job_description, job_description_text)
+
+    async def event_generator():
+        queue: asyncio.Queue = asyncio.Queue()
+        loop = asyncio.get_running_loop()
+
+        def push_event(event: dict):
+            loop.call_soon_threadsafe(queue.put_nowait, event)
+
+        def worker():
+            try:
+                push_event({
+                    "type": "thought",
+                    "agent": "Perception Agent",
+                    "title": "Ingesting Documents",
+                    "thought": f"Extracting text from candidate resume ({resume.filename}) and target JD ({jd_filename})...",
+                    "progress": 15,
+                })
+                raw_resume_text = extract_text_from_file(resume_path)
+
+                push_event({
+                    "type": "thought",
+                    "agent": "Markdown Converter",
+                    "title": "Structuring Markdown",
+                    "thought": "Standardizing section headings (Summary, Experience, Skills, Education)...",
+                    "progress": 30,
+                })
+                resume_markdown = convert_cleaned_text_to_markdown(raw_resume_text, document_title=Path(resume.filename or "Resume").stem)
+                jd_markdown = convert_cleaned_text_to_markdown(jd_text, document_title=Path(jd_filename or "Job Description").stem)
+
+                push_event({
+                    "type": "thought",
+                    "agent": "Profile Extraction Agent",
+                    "title": "Analyzing Profiles",
+                    "thought": "Extracting candidate achievements and JD requirements via spaCy NLP & LLM...",
+                    "progress": 50,
+                })
+                resume_profile = extract_profile(resume_markdown, "resume")
+                jd_profile = extract_profile(jd_markdown, "job_description")
+
+                resume_skills = ResumeSkills(skills=[skill.name for skill in resume_profile.skills] or resume_profile.keywords)
+                jd_skill_values = [skill.name for skill in jd_profile.required_skills + jd_profile.preferred_skills]
+                jd_skills = JobDescriptionSkills(skills=jd_skill_values or jd_profile.keywords)
+
+                push_event({
+                    "type": "thought",
+                    "agent": "Similarity Engine",
+                    "title": "Computing Match Scores",
+                    "thought": "Computing RapidFuzz semantic skill overlap and experience weighting...",
+                    "progress": 70,
+                })
+                similarity = calculate_similarity(resume_skills, jd_skills)
+                structured_comparison = compare_profiles(resume_profile, jd_profile)
+
+                push_event({
+                    "type": "thought",
+                    "agent": "ATS Auditor Critic",
+                    "title": "Auditing ATS Readiness",
+                    "thought": f"Auditing keyword match density ({similarity.match_score}%) and Flesch-Kincaid readability grade...",
+                    "progress": 85,
+                })
+                agent_audit = audit_resume_draft(resume_markdown, jd_markdown, target_skills=jd_skills.skills)
+
+                push_event({
+                    "type": "thought",
+                    "agent": "Recruiter Advisor",
+                    "title": "Synthesizing Recommendations",
+                    "thought": "Formulating tailored recommendations, matched strengths, and missing skill gaps...",
+                    "progress": 95,
+                })
+                llm_analysis = generate_llm_analysis(resume_markdown, jd_markdown, resume_skills, jd_skills)
+
+                response_obj = ResumeComparisonResponse(
+                    resume_file=resume.filename,
+                    job_description_file=jd_filename,
+                    resume_skills=resume_skills,
+                    job_description_skills=jd_skills,
+                    similarity=similarity,
+                    llm_analysis=llm_analysis,
+                    resume_profile=resume_profile,
+                    job_description_profile=jd_profile,
+                    structured_comparison=structured_comparison,
+                    agent_audit=agent_audit,
+                )
+
+                push_event({
+                    "type": "complete",
+                    "agent": "Supervisor Agent",
+                    "title": "Comparison Complete",
+                    "thought": f"Role comparison complete! Match score: {similarity.match_score}%, ATS overall: {structured_comparison.overall_score}%.",
+                    "progress": 100,
+                    "result": response_obj.model_dump(mode="json"),
+                })
+            except Exception as exc:
+                logger.error(f"[PIPELINE ERROR: COMPARE STREAM] {exc}")
+                push_event({"type": "error", "error": str(exc)})
+            finally:
+                remove_temp_files(resume_path, jd_path)
+
+        asyncio.create_task(asyncio.to_thread(worker))
+
+        while True:
+            event = await queue.get()
+            yield json.dumps(event) + "\n"
+            if event.get("type") in ("complete", "error"):
+                break
+
+    return StreamingResponse(event_generator(), media_type="application/x-ndjson")

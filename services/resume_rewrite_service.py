@@ -36,6 +36,7 @@ def rewrite_resume_with_agent(
     target_score: float = 80.0,
     max_iterations: int = 3,
     enforce_fact_check: bool = True,
+    progress_callback=None,
 ):
     """Executes the autonomous multi-agent reflection loop (Drafter + Auditor + Fact-Checker)."""
     if not get_llm_api_key():
@@ -50,6 +51,7 @@ def rewrite_resume_with_agent(
             target_score=target_score,
             max_iterations=max_iterations,
             enforce_fact_check=enforce_fact_check,
+            progress_callback=progress_callback,
         )
     except RuntimeError:
         raise

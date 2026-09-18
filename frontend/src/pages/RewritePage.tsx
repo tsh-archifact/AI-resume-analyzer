@@ -1,78 +1,23 @@
 import { useState, useEffect, type FormEvent } from 'react'
 
 import {
-  runAgentRewrite,
+  runAgentRewriteStream,
   exportDocx,
   getResumeTemplates,
   type AgentRewriteMetadata,
   type ResumeTemplateInfo,
+  type AgentThoughtEvent,
+  DEFAULT_TEMPLATES,
 } from '../api/resume'
 import { ApiRequestError } from '../api/client'
 import { FileUpload } from '../components/FileUpload'
+import { AgentActivityFeed, type AgentThoughtLogItem } from '../components/AgentActivityFeed'
+import { TemplateSelector } from '../components/TemplateSelector'
 import { useAuth } from '../context/AuthContext'
 import type { RefinementLoopResult, AgentIterationStep } from '../types/api'
 
-
 const RESUME_ACCEPT = '.pdf,.doc,.docx'
 const JD_ACCEPT = '.pdf,.doc,.docx,.txt,.png,.jpg,.jpeg'
-
-const DEFAULT_TEMPLATES: ResumeTemplateInfo[] = [
-  {
-    template_id: 'modern_teal',
-    name: 'Modern Minimalist',
-    description: 'Clean sans-serif layout with deep teal accents. Ideal for tech, product, and modern businesses.',
-    persona: 'Recommended for Tech, Product, & Startups',
-    font_family: 'Calibri',
-    accent_hex: '#0F766E',
-    secondary_hex: '#475569',
-    features: ['Teal section underline', 'Calibri clean sans', 'Modern layout'],
-    is_default: true,
-  },
-  {
-    template_id: 'executive_navy',
-    name: 'Executive Classic',
-    description: 'Authoritative serif typography in rich navy blue. Engineered for leadership, finance, and consulting.',
-    persona: 'Recommended for Leadership, Finance, & Consulting',
-    font_family: 'Georgia',
-    accent_hex: '#1E3A8A',
-    secondary_hex: '#334155',
-    features: ['Centered prestige header', 'Georgia elegant serif', 'Navy dividers'],
-    is_default: false,
-  },
-  {
-    template_id: 'tech_indigo',
-    name: 'Tech & Developer',
-    description: 'Modern high-clarity typography with electric indigo accents. Tailored for software engineers and DevOps.',
-    persona: 'Recommended for Software Engineers & DevOps',
-    font_family: 'Segoe UI',
-    accent_hex: '#4338CA',
-    secondary_hex: '#374151',
-    features: ['Indigo accent line', 'Segoe UI tech font', 'Clean compact bullets'],
-    is_default: false,
-  },
-  {
-    template_id: 'elegant_burgundy',
-    name: 'Elegant Academic',
-    description: 'Refined serif aesthetic with deep burgundy accents. Perfect for academia, research, and writing.',
-    persona: 'Recommended for Academia, Research, & Medical',
-    font_family: 'Cambria',
-    accent_hex: '#881337',
-    secondary_hex: '#4A5568',
-    features: ['Centered title', 'Deep burgundy styling', 'Cambria academic serif'],
-    is_default: false,
-  },
-  {
-    template_id: 'compact_slate',
-    name: 'Compact High-Density',
-    description: 'Space-efficient, high-density layout designed to fit extensive career histories into fewer pages.',
-    persona: 'Recommended for Multi-Page Content / Maximum Space',
-    font_family: 'Arial',
-    accent_hex: '#1F2937',
-    secondary_hex: '#4B5563',
-    features: ['Slim 0.55-in margins', 'High data density', 'Graphite ATS-optimized'],
-    is_default: false,
-  },
-]
 
 export function RewritePage() {
   const { token } = useAuth()
@@ -87,6 +32,12 @@ export function RewritePage() {
   const [submitting, setSubmitting] = useState(false)
   const [downloading, setDownloading] = useState(false)
   const [copied, setCopied] = useState(false)
+
+  // Real-time agent activity feed states
+  const [rewriteThought, setRewriteThought] = useState<string | null>(null)
+  const [rewriteAgent, setRewriteAgent] = useState<string | null>(null)
+  const [rewriteProgress, setRewriteProgress] = useState(0)
+  const [rewriteLog, setRewriteLog] = useState<AgentThoughtLogItem[]>([])
 
   const [templates, setTemplates] = useState<ResumeTemplateInfo[]>(DEFAULT_TEMPLATES)
   const [selectedTemplate, setSelectedTemplate] = useState<string>('modern_teal')
@@ -103,6 +54,11 @@ export function RewritePage() {
         // Fallback already pre-populated
       })
   }, [token])
+
+  const formatTimestamp = () => {
+    const now = new Date()
+    return now.toTimeString().split(' ')[0]
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -132,16 +88,43 @@ export function RewritePage() {
     }
 
     setSubmitting(true)
+    setRewriteThought('Initializing agent perception and document parsing…')
+    setRewriteAgent('Perception Agent')
+    setRewriteProgress(10)
+    setRewriteLog([
+      {
+        id: String(Date.now()),
+        agent: 'Perception Agent',
+        thought: `Extracting candidate achievements and target job requirements (${resume.name})…`,
+        timestamp: formatTimestamp(),
+      },
+    ])
 
     try {
-      // Execute the multi-agent reflection loop (Drafter + Auditor + Fact-Checker)
-      const result = await runAgentRewrite(
+      // Execute the multi-agent reflection loop (Drafter + Auditor + Fact-Checker) with live thoughts
+      const result = await runAgentRewriteStream(
         {
           resume,
           jobDescriptionFile: jdMode === 'file' ? jdFile : null,
           jobDescriptionText: jdMode === 'text' ? jdText : undefined,
         },
         token,
+        (event: AgentThoughtEvent) => {
+          if (event.thought) {
+            setRewriteThought(event.thought)
+            setRewriteAgent(event.agent ?? 'Supervisor Agent')
+            if (event.progress) setRewriteProgress(event.progress)
+            setRewriteLog((prev) => [
+              ...prev,
+              {
+                id: `${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+                agent: event.agent ?? 'Supervisor Agent',
+                thought: event.thought ?? '',
+                timestamp: formatTimestamp(),
+              },
+            ])
+          }
+        },
         80, // Target score threshold
         3,  // Max iterations
       )
@@ -277,50 +260,61 @@ export function RewritePage() {
           </div>
         </form>
 
-        <aside className="note-card info-panel" style={{ padding: 0, overflow: 'hidden' }}>
-          <div className="note-banner banner-peach">
-            <span>MULTI-AGENT SPECIFICATION</span>
-            <span style={{ opacity: 0.8, fontSize: '0.82rem', letterSpacing: '0.08em' }}>WORKFLOW</span>
-          </div>
-
-          <div style={{ padding: '1.25rem' }}>
-            {agentStats && agentStats.finalScore !== null ? (
-              <div className="agent-summary-card" style={{ marginBottom: '1.25rem', padding: '1rem', background: 'var(--surface-cream)', border: '1.5px dashed var(--border-dashed)', borderRadius: 'var(--radius-sm)' }}>
-                <h2 className="marker-blue-title" style={{ marginTop: 0 }}>🤖 Agent Performance Card</h2>
-                <div style={{ margin: '0.75rem 0', display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontFamily: 'var(--font-notes)', fontSize: '1.1rem', fontWeight: 700 }}>Iterations Performed:</span>
-                    <span className="badge" style={{ background: 'var(--banner-blue)', color: '#0c4a6e', padding: '0.2rem 0.65rem', borderRadius: 'var(--radius-pill)', border: '1px solid var(--contour-ink)', fontFamily: 'var(--font-mono)', fontSize: '0.82rem', fontWeight: 700 }}>
-                      {agentStats.iterations ?? 1} passes
-                    </span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontFamily: 'var(--font-notes)', fontSize: '1.1rem', fontWeight: 700 }}>ATS Score Progression:</span>
-                    <span style={{ fontFamily: 'var(--font-title)', fontSize: '1.2rem', fontWeight: 700, color: 'var(--success)' }}>
-                      {agentStats.initialScore ?? 0}% → {agentStats.finalScore}%
-                      {agentStats.scoreImprovement && agentStats.scoreImprovement > 0 ? ` (+${agentStats.scoreImprovement}%)` : ''}
-                    </span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontFamily: 'var(--font-notes)', fontSize: '1.1rem', fontWeight: 700 }}>Fact-Checking Guardrail:</span>
-                    <span style={{ color: agentStats.isFactClean ? 'var(--success)' : 'var(--warning)', fontWeight: 700, fontFamily: 'var(--font-notes)', fontSize: '1.1rem' }}>
-                      {agentStats.isFactClean ? '✅ 100% Grounded (0 Hallucinations)' : '⚠️ Grounded with notes'}
-                    </span>
-                  </div>
-                </div>
+        <div className="results-stack">
+          {submitting ? (
+            <AgentActivityFeed
+              currentThought={rewriteThought}
+              activeAgent={rewriteAgent}
+              progress={rewriteProgress}
+              history={rewriteLog}
+            />
+          ) : (
+            <aside className="note-card info-panel" style={{ padding: 0, overflow: 'hidden', width: '100%' }}>
+              <div className="note-banner banner-peach">
+                <span>MULTI-AGENT SPECIFICATION</span>
+                <span style={{ opacity: 0.8, fontSize: '0.82rem', letterSpacing: '0.08em' }}>WORKFLOW</span>
               </div>
-            ) : null}
 
-            <h2 className="marker-blue-title" style={{ marginTop: 0 }}>How the agentic flow works</h2>
-            <ul className="note-bullets">
-              <li><strong>Perception:</strong> Ingests resume &amp; JD, extracting keywords and metrics.</li>
-              <li><strong>Drafter Agent:</strong> Produces role-targeted bullet points using active verbs.</li>
-              <li><strong>ATS Auditor Critic:</strong> Scans keyword density, quantification &amp; ATS structure.</li>
-              <li><strong>Fact-Checker:</strong> Verifies every technical skill against your source resume.</li>
-              <li><strong>Reflection Loop:</strong> Iterates until the resume hits the ATS quality threshold.</li>
-            </ul>
-          </div>
-        </aside>
+              <div style={{ padding: '1.25rem' }}>
+                {agentStats && agentStats.finalScore !== null ? (
+                  <div className="agent-summary-card" style={{ marginBottom: '1.25rem', padding: '1rem', background: 'var(--surface-cream)', border: '1.5px dashed var(--border-dashed)', borderRadius: 'var(--radius-sm)' }}>
+                    <h2 className="marker-blue-title" style={{ marginTop: 0 }}>🤖 Agent Performance Card</h2>
+                    <div style={{ margin: '0.75rem 0', display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontFamily: 'var(--font-notes)', fontSize: '1.1rem', fontWeight: 700 }}>Iterations Performed:</span>
+                        <span className="badge" style={{ background: 'var(--banner-blue)', color: '#0c4a6e', padding: '0.2rem 0.65rem', borderRadius: 'var(--radius-pill)', border: '1px solid var(--contour-ink)', fontFamily: 'var(--font-mono)', fontSize: '0.82rem', fontWeight: 700 }}>
+                          {agentStats.iterations ?? 1} passes
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontFamily: 'var(--font-notes)', fontSize: '1.1rem', fontWeight: 700 }}>ATS Score Progression:</span>
+                        <span style={{ fontFamily: 'var(--font-title)', fontSize: '1.2rem', fontWeight: 700, color: 'var(--success)' }}>
+                          {agentStats.initialScore ?? 0}% → {agentStats.finalScore}%
+                          {agentStats.scoreImprovement && agentStats.scoreImprovement > 0 ? ` (+${agentStats.scoreImprovement}%)` : ''}
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontFamily: 'var(--font-notes)', fontSize: '1.1rem', fontWeight: 700 }}>Fact-Checking Guardrail:</span>
+                        <span style={{ color: agentStats.isFactClean ? 'var(--success)' : 'var(--warning)', fontWeight: 700, fontFamily: 'var(--font-notes)', fontSize: '1.1rem' }}>
+                          {agentStats.isFactClean ? '✅ 100% Grounded (0 Hallucinations)' : '⚠️ Grounded with notes'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+
+                <h2 className="marker-blue-title" style={{ marginTop: 0 }}>How the agentic flow works</h2>
+                <ul className="note-bullets">
+                  <li><strong>Perception:</strong> Ingests resume &amp; JD, extracting keywords and metrics.</li>
+                  <li><strong>Drafter Agent:</strong> Produces role-targeted bullet points using active verbs.</li>
+                  <li><strong>ATS Auditor Critic:</strong> Scans keyword density, quantification &amp; ATS structure.</li>
+                  <li><strong>Fact-Checker:</strong> Verifies every technical skill against your source resume.</li>
+                  <li><strong>Reflection Loop:</strong> Iterates until the resume hits the ATS quality threshold.</li>
+                </ul>
+              </div>
+            </aside>
+          )}
+        </div>
       </div>
 
       {/* When Agentic Optimization finishes: Display full on-screen preview & iteration history */}
@@ -363,58 +357,11 @@ export function RewritePage() {
             </div>
 
             {/* Template Selector */}
-            <div className="template-picker-section">
-              <div className="template-picker-header">
-                <div>
-                  <h3 className="marker-blue-title" style={{ margin: 0, fontSize: '1.15rem' }}>
-                    🎨 Select DOCX Template Style
-                  </h3>
-                  <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                    Pick one of 5 ATS-compliant formatting designs for your exported Word document.
-                  </p>
-                </div>
-                <div className="template-active-badge">
-                  Selected: <strong>{templates.find((t) => t.template_id === selectedTemplate)?.name}</strong>
-                </div>
-              </div>
-
-              <div className="template-grid">
-                {templates.map((tpl) => {
-                  const isSelected = tpl.template_id === selectedTemplate
-                  return (
-                    <div
-                      key={tpl.template_id}
-                      className={`template-card ${isSelected ? 'template-card-selected' : ''}`}
-                      onClick={() => setSelectedTemplate(tpl.template_id)}
-                      role="button"
-                      tabIndex={0}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          setSelectedTemplate(tpl.template_id)
-                        }
-                      }}
-                    >
-                      <div className="template-card-header">
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                          <span
-                            className="template-swatch"
-                            style={{ backgroundColor: tpl.accent_hex }}
-                            title={`Accent: ${tpl.accent_hex}`}
-                          />
-                          <span className="template-name">{tpl.name}</span>
-                        </div>
-                        {isSelected && <span className="template-check">✓ Active</span>}
-                      </div>
-                      <div className="template-meta">
-                        <span className="template-font-tag">Font: {tpl.font_family}</span>
-                        <span className="template-persona-tag">{tpl.persona}</span>
-                      </div>
-                      <p className="template-desc">{tpl.description}</p>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
+            <TemplateSelector
+              templates={templates}
+              selectedTemplate={selectedTemplate}
+              onSelectTemplate={setSelectedTemplate}
+            />
 
             {/* Iteration Timeline */}
             {loopResult.iteration_history && loopResult.iteration_history.length > 1 ? (
