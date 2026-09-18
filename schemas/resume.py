@@ -89,6 +89,9 @@ class LLMRecommendation(BaseModel):
     model_used: str = Field(default="heuristic")
 
 
+from schemas.agent import ATSAuditResult
+
+
 class ResumeComparisonResponse(BaseModel):
     resume_file: str | None = None
     job_description_file: str | None = None
@@ -99,3 +102,5 @@ class ResumeComparisonResponse(BaseModel):
     resume_profile: ResumeProfile | None = None
     job_description_profile: JobDescriptionProfile | None = None
     structured_comparison: StructuredComparison | None = None
+    agent_audit: ATSAuditResult | None = None
+

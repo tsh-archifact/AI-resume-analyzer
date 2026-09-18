@@ -11,11 +11,11 @@ export function Layout() {
         <div className="container header-inner">
           <NavLink to="/" className="brand">
             <span className="brand-mark" aria-hidden="true">
-              RA
+              📝
             </span>
             <span>
               <strong>Resume Analyzer</strong>
-              <small>AI-powered job fit insights</small>
+              <small>complete notes · job-fit intelligence</small>
             </span>
           </NavLink>
 
@@ -31,7 +31,7 @@ export function Layout() {
           <div className="header-actions">
             {user ? (
               <>
-                <span className="user-chip">{user.username}</span>
+                <span className="user-chip">user: {user.username}</span>
                 <button type="button" className="btn btn-ghost" onClick={logout}>
                   Sign out
                 </button>
@@ -42,7 +42,7 @@ export function Layout() {
                   Sign in
                 </NavLink>
                 <NavLink to="/register" className="btn btn-primary">
-                  Create account
+                  Sign up
                 </NavLink>
               </>
             )}
@@ -56,8 +56,12 @@ export function Layout() {
 
       <footer className="site-footer">
         <div className="container footer-inner">
-          <p>Upload your resume and job description to extract skills, score fit, and generate tailored rewrites.</p>
-          <p className="footer-meta">Backend API runs separately on port 8000.</p>
+          <p>
+            <strong>AI Resume Analyzer</strong> — revision notes &amp; multi-agent reflection loop for job applicants.
+          </p>
+          <p className="footer-meta">
+            Backend API: <code style={{ fontFamily: 'var(--font-mono)' }}>http://127.0.0.1:8000</code> · FastAPI + Groq LLM
+          </p>
         </div>
       </footer>
     </div>

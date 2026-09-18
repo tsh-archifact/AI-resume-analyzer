@@ -5,21 +5,20 @@ build/
 dist/
 wheels/
 *.egg-info
+.pytest_cache/
 
-# Virtual environments
-.venv
+# Virtual environments & package caches
+.venv/
+.uv-cache/
 
-# Project local folders
-/test/
-/dataset/
-/prompts/
-/.env
-/auth.db
-/AGENTS.md
+# Environment & local credentials
+.env
+auth.db
 
 # Frontend
 /frontend/node_modules/
 /frontend/dist/
-/architecture.md
-AGENTS.md
-architecture.md
+
+# Logs
+logs/
+*.log

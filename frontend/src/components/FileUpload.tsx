@@ -60,12 +60,12 @@ export function FileUpload({ id, label, hint, accept, file, onChange }: FileUplo
         />
         {file ? (
           <>
-            <p className="upload-title">{file.name}</p>
-            <p className="upload-meta">{(file.size / 1024).toFixed(1)} KB · click to replace</p>
+            <p className="upload-title">📎 {file.name}</p>
+            <p className="upload-meta">{(file.size / 1024).toFixed(1)} KB · click to replace file</p>
           </>
         ) : (
           <>
-            <p className="upload-title">Drop a file here or click to browse</p>
+            <p className="upload-title">📄 Drop a file here or click to browse</p>
             <p className="upload-meta">{hint}</p>
           </>
         )}
